@@ -1,0 +1,27 @@
+# render.yaml — configuração de deploy automático no Render
+# (https://render.com — plano gratuito disponível)
+#
+# Como usar:
+#   1. Suba o projeto pro GitHub
+#   2. No Render: New > Blueprint > conecte o repositório
+#   3. O Render lê este arquivo e configura tudo sozinho
+#   4. Nas variáveis de ambiente do serviço, preencha as chaves reais
+#      (OCR_API_KEY, FS_CLIENT_ID, FS_CLIENT_SECRET) — o valor aqui
+#      embaixo fica vazio de propósito, por segurança.
+
+services:
+  - type: web
+    name: glicoscan-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app
+    envVars:
+      - key: OCR_API_KEY
+        sync: false
+      - key: FS_CLIENT_ID
+        sync: false
+      - key: FS_CLIENT_SECRET
+        sync: false
+      - key: CALORIE_API_KEY
+        sync: false
