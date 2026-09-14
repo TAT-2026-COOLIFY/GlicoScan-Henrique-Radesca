@@ -20,6 +20,27 @@ FS_CLIENT_ID     = os.environ.get('FS_CLIENT_ID', '')
 FS_CLIENT_SECRET = os.environ.get('FS_CLIENT_SECRET', '')
 CALORIE_API_KEY  = os.environ.get('CALORIE_API_KEY', '')  # opcional
 
+# Token simples pra travar a API — sem ele, qualquer um com a URL do
+# Render lê /historico (dose de insulina, glicemia) e pode apagar tudo
+# via DELETE. Opcional em dev local; MUITO recomendado assim que o
+# backend for exposto publicamente (ver DEPLOY.md). Vazio = sem trava.
+APP_TOKEN = os.environ.get('APP_TOKEN', '')
+
+# Origens liberadas pro CORS, separadas por vírgula (ex: a URL do Vercel
+# em produção). '*' (padrão) libera geral — ok em dev local, mas em
+# produção é melhor travar pro domínio do frontend (ver DEPLOY.md).
+ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS') or '*'
+
+
+def parse_origins(valor):
+    """'*' vira '*' (flask-cors entende como 'libera geral'); senão vira lista, sem espaços/vazios."""
+    if valor == '*':
+        return '*'
+    return [o.strip() for o in valor.split(',') if o.strip()]
+
+
+CORS_ORIGINS = parse_origins(ALLOWED_ORIGINS)
+
 _CHAVES_OBRIGATORIAS = {
     'OCR_API_KEY': OCR_API_KEY,
     'FS_CLIENT_ID': FS_CLIENT_ID,

@@ -41,8 +41,14 @@ def _expandir_linhas(linhas):
 
 
 def _numeros_da_linha(linha):
+    """
+    Extrai os números de uma linha. O \\b final foi removido de propósito:
+    número colado na unidade sem espaço (ex: "20g", comum no texto bruto
+    do OCR) não tem boundary entre dígito e letra (ambos são \\w), então
+    um \\b ali fazia o regex simplesmente não casar o número nenhum.
+    """
     resultado = []
-    for n in re.findall(r'\b(\d+[,.]?\d*)\b', linha):
+    for n in re.findall(r'\b(\d+[,.]?\d*)', linha):
         try:
             v = float(n.replace(',', '.'))
             if 0 <= v <= 9999:

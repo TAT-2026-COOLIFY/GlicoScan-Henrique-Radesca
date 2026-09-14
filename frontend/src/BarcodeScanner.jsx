@@ -96,6 +96,22 @@ export default function BarcodeScanner({ onResult, onClose }) {
     if (modo !== 'html5') return
     let active = true
     let scanner = null
+    // Trava pra garantir que stop() só é chamado UMA vez.
+    // O html5-qrcode lança erro SÍNCRONO (não Promise rejeitada)
+    // se stop() for chamado num scanner que já não está rodando —
+    // e um .catch() não pega throw síncrono, então sem essa trava
+    // a segunda chamada (do cleanup do useEffect) derrubava a tela.
+    let stopped = false
+
+    const safeStop = async () => {
+      if (stopped || !scanner) return
+      stopped = true
+      try {
+        await scanner.stop()
+      } catch (e) {
+        console.warn('Erro ao parar scanner (ignorado):', e)
+      }
+    }
 
     const init = async () => {
       try {
@@ -106,7 +122,7 @@ export default function BarcodeScanner({ onResult, onClose }) {
           { facingMode: 'environment' },
           { fps: 15, qrbox: { width: 240, height: 100 },
             experimentalFeatures: { useBarCodeDetectorIfSupported: true } },
-          (code) => { scanner.stop().catch(()=>{}); onResult(code) },
+          (code) => { safeStop(); onResult(code) },
           () => {}
         )
         setStatus('ativo')
@@ -120,7 +136,7 @@ export default function BarcodeScanner({ onResult, onClose }) {
     init()
     return () => {
       active = false
-      if (scanner) scanner.stop().catch(()=>{})
+      safeStop()
     }
   }, [modo])
 

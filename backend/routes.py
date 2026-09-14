@@ -13,15 +13,30 @@ from flask import Blueprint, request, jsonify
 
 import database as db
 import parsing
-from config import OCR_API_KEY, CALORIE_API_KEY
+from config import OCR_API_KEY, CALORIE_API_KEY, APP_TOKEN
+from extensions import limiter
 from services import ocr, openfoodfacts, usda, fatsecret
 
 bp = Blueprint('rotas', __name__)
 
 
+@bp.before_request
+def _checar_app_token():
+    """
+    Trava simples por token compartilhado (header X-App-Token). Sem
+    APP_TOKEN configurado no .env, fica desativada (uso local). /health
+    fica sempre aberta pro monitor de uptime do Render não precisar do token.
+    """
+    if not APP_TOKEN or request.method == 'OPTIONS' or request.path == '/health':
+        return None
+    if request.headers.get('X-App-Token') != APP_TOKEN:
+        return jsonify({'erro': 'Não autorizado'}), 401
+
+
 # ── OCR de foto da tabela nutricional ──────────────────────────────
 
 @bp.route('/analisar', methods=['POST'])
+@limiter.limit('10 per minute')  # OCR.space é a chamada mais cara/lenta da API
 def analisar():
     try:
         data = request.get_json()
@@ -75,6 +90,7 @@ def _buscar_com_cache(nome):
 
 
 @bp.route('/buscar')
+@limiter.limit('15 per minute')
 def buscar():
     nome = request.args.get('nome', '').strip()
     if not nome:
@@ -86,6 +102,7 @@ def buscar():
 
 
 @bp.route('/barcode/fallback')
+@limiter.limit('15 per minute')
 def barcode_fallback():
     """Quando a busca por código de barras falha, permite buscar pelo nome do produto."""
     nome = request.args.get('nome', '').strip()
@@ -143,6 +160,7 @@ def _tentar_calorie_api(code):
 
 
 @bp.route('/barcode')
+@limiter.limit('20 per minute')
 def barcode():
     """
     Busca produto por código de barras, em cascata:
@@ -205,14 +223,40 @@ def barcode():
 
 # ── Histórico de cálculos ───────────────────────────────────────────
 
+CAMPOS_HISTORICO_NUMERICOS = [
+    'carboidratos', 'acucares', 'fibras', 'proteinas', 'gorduras', 'calorias',
+    'carboTotal', 'porcoes', 'ric', 'dose', 'glicemiaAtual',
+]
+
+
+def _validar_historico(d):
+    """Rejeita payload malformado antes de gravar no banco (produto obrigatório, numéricos precisam ser conversíveis)."""
+    if not isinstance(d, dict):
+        return 'Corpo da requisição inválido'
+    if not str(d.get('produto', '')).strip():
+        return 'Produto é obrigatório'
+    for campo in CAMPOS_HISTORICO_NUMERICOS:
+        valor = d.get(campo)
+        if valor is not None:
+            try:
+                float(valor)
+            except (TypeError, ValueError):
+                return f'Campo "{campo}" precisa ser numérico'
+    return None
+
+
 @bp.route('/historico', methods=['GET'])
 def get_historico():
-    return jsonify(db.listar_historico())
+    return jsonify(db.listar_historico(perfil=request.args.get('perfil')))
 
 
 @bp.route('/historico', methods=['POST'])
 def post_historico():
-    db.adicionar_historico(request.get_json())
+    dados = request.get_json(silent=True)
+    erro = _validar_historico(dados)
+    if erro:
+        return jsonify({'erro': erro}), 400
+    db.adicionar_historico(dados)
     return jsonify({'ok': True})
 
 
@@ -224,18 +268,19 @@ def delete_historico_item(id):
 
 @bp.route('/historico', methods=['DELETE'])
 def delete_historico_tudo():
-    db.limpar_historico()
+    db.limpar_historico(perfil=request.args.get('perfil'))
     return jsonify({'ok': True})
 
 
 @bp.route('/stats')
 def stats():
-    return jsonify(db.obter_estatisticas())
+    return jsonify(db.obter_estatisticas(perfil=request.args.get('perfil')))
 
 
 # ── Utilitárias ──────────────────────────────────────────────────
 
 @bp.route('/health')
+@limiter.exempt  # monitor de uptime do Render bate aqui com frequência
 def health():
     return jsonify({
         'status': 'ok',

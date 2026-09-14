@@ -1,0 +1,21 @@
+# Segredos — NUNCA commitar
+backend/.env
+backend/.env.exemplo
+backend/.env.*.local
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/glicoscan.db
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Ferramentas locais (Claude Code) — estado de sessão, não é código do projeto
+.claude/

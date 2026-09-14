@@ -11,6 +11,11 @@ import json
 from datetime import datetime, timedelta
 from config import DB_PATH
 
+# Mesmo nome que o frontend dá ao perfil migrado do formato antigo
+# (perfil único) — assim, linhas de histórico gravadas antes de existir
+# múltiplos perfis continuam aparecendo pra quem era o único usuário.
+PERFIL_PADRAO = 'Perfil 1'
+
 
 def get_connection():
     return sqlite3.connect(DB_PATH)
@@ -27,7 +32,7 @@ def init_db():
             proteinas REAL, gorduras REAL, calorias REAL,
             carbo_total REAL, porcoes REAL, ric INTEGER,
             dose REAL, insulina TEXT, glicemia_atual REAL,
-            data TEXT, hora TEXT
+            data TEXT, hora TEXT, perfil TEXT
         );
         CREATE TABLE IF NOT EXISTS cache_busca (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,6 +41,12 @@ def init_db():
             criado_em TEXT
         );
     ''')
+    # Migração pra bancos criados antes de existir perfil (múltiplas
+    # "regulagens" no mesmo app) — coluna nova não some das linhas antigas.
+    try:
+        conn.execute('ALTER TABLE historico ADD COLUMN perfil TEXT')
+    except sqlite3.OperationalError:
+        pass  # coluna já existe
     conn.commit()
     conn.close()
 
@@ -108,10 +119,18 @@ def buscar_cache_barcode(code):
 
 # ── Histórico de cálculos ────────────────────────────────────────
 
-def listar_historico(limite=100):
+def listar_historico(perfil=None, limite=100):
+    """Sem `perfil`, devolve o histórico de todo mundo (uso interno/depuração).
+    Linhas antigas sem perfil gravado (COALESCE) contam como PERFIL_PADRAO."""
     conn = get_connection()
     conn.row_factory = sqlite3.Row
-    rows = conn.execute('SELECT * FROM historico ORDER BY id DESC LIMIT ?', (limite,)).fetchall()
+    if perfil:
+        rows = conn.execute(
+            'SELECT * FROM historico WHERE COALESCE(perfil, ?) = ? ORDER BY id DESC LIMIT ?',
+            (PERFIL_PADRAO, perfil, limite),
+        ).fetchall()
+    else:
+        rows = conn.execute('SELECT * FROM historico ORDER BY id DESC LIMIT ?', (limite,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -121,14 +140,14 @@ def adicionar_historico(d):
     agora = datetime.now()
     conn.execute('''INSERT INTO historico
         (produto,porcao,unidade,carboidratos,acucares,fibras,proteinas,gorduras,
-         calorias,carbo_total,porcoes,ric,dose,insulina,glicemia_atual,data,hora)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+         calorias,carbo_total,porcoes,ric,dose,insulina,glicemia_atual,data,hora,perfil)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
         d.get('produto', ''), d.get('porcao', ''), d.get('unidade', ''),
         d.get('carboidratos', 0), d.get('acucares', 0), d.get('fibras', 0),
         d.get('proteinas', 0), d.get('gorduras', 0), d.get('calorias', 0),
         d.get('carboTotal', 0), d.get('porcoes', 1), d.get('ric', 15),
         d.get('dose', 0), d.get('insulina', ''), d.get('glicemiaAtual', 0),
-        agora.strftime('%d/%m/%Y'), agora.strftime('%H:%M'),
+        agora.strftime('%d/%m/%Y'), agora.strftime('%H:%M'), d.get('perfil') or PERFIL_PADRAO,
     ))
     conn.commit()
     conn.close()
@@ -141,26 +160,36 @@ def remover_historico(id):
     conn.close()
 
 
-def limpar_historico():
+def limpar_historico(perfil=None):
+    """Sem `perfil`, apaga o histórico de todo mundo — cuidado, uso interno."""
     conn = get_connection()
-    conn.execute('DELETE FROM historico')
+    if perfil:
+        conn.execute('DELETE FROM historico WHERE COALESCE(perfil, ?) = ?', (PERFIL_PADRAO, perfil))
+    else:
+        conn.execute('DELETE FROM historico')
     conn.commit()
     conn.close()
 
 
-def obter_estatisticas():
+def obter_estatisticas(perfil=None):
     conn = get_connection()
     conn.row_factory = sqlite3.Row
-    total = conn.execute('SELECT COUNT(*) as n FROM historico').fetchone()['n']
-    media_carbo = conn.execute('SELECT AVG(carbo_total) as m FROM historico').fetchone()['m']
-    media_dose = conn.execute('SELECT AVG(dose) as m FROM historico').fetchone()['m']
-    por_dia = conn.execute('''
+
+    if perfil:
+        where, params = 'WHERE COALESCE(perfil, ?) = ?', (PERFIL_PADRAO, perfil)
+    else:
+        where, params = '', ()
+
+    total = conn.execute(f'SELECT COUNT(*) as n FROM historico {where}', params).fetchone()['n']
+    media_carbo = conn.execute(f'SELECT AVG(carbo_total) as m FROM historico {where}', params).fetchone()['m']
+    media_dose = conn.execute(f'SELECT AVG(dose) as m FROM historico {where}', params).fetchone()['m']
+    por_dia = conn.execute(f'''
         SELECT data, SUM(carbo_total) as carbo, SUM(dose) as dose, COUNT(*) as ref
-        FROM historico GROUP BY data ORDER BY id DESC LIMIT 7
-    ''').fetchall()
-    mais_consumidos = conn.execute('''
-        SELECT produto, COUNT(*) as v FROM historico GROUP BY produto ORDER BY v DESC LIMIT 5
-    ''').fetchall()
+        FROM historico {where} GROUP BY data ORDER BY id DESC LIMIT 7
+    ''', params).fetchall()
+    mais_consumidos = conn.execute(f'''
+        SELECT produto, COUNT(*) as v FROM historico {where} GROUP BY produto ORDER BY v DESC LIMIT 5
+    ''', params).fetchall()
     conn.close()
 
     return {

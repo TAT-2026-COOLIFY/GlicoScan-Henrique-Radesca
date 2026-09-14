@@ -5,6 +5,7 @@ GlicoScan API — calculadora de insulina para diabéticos tipo 1 (TCC ADS/FEMA)
 
 Arquitetura do backend:
   config.py          → chaves de API (via .env) e configuração
+  extensions.py        → Limiter (rate limit), à parte pra evitar import circular
   database.py         → acesso ao SQLite (histórico + cache)
   parsing.py           → interpretação do texto extraído por OCR
   services/
@@ -12,21 +13,34 @@ Arquitetura do backend:
     usda.py             → 2ª fonte, fallback com match exato de código de barras
     fatsecret.py       → busca complementar por nome
     ocr.py               → extração de texto de fotos (dual engine)
-  routes.py            → todos os endpoints HTTP
+  routes.py            → todos os endpoints HTTP (+ trava por token e rate limit)
 
 Rodar localmente:  python server.py                    (porta 5000)
 Rodar em produção: gunicorn server:app                 (ver DEPLOY.md)
 """
 import os
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 
+from config import CORS_ORIGINS
 from database import init_db
+from extensions import limiter
 from routes import bp as rotas_bp
 
 app = Flask(__name__)
-CORS(app)  # libera acesso do frontend (outro domínio, quando em produção)
+
+# '*' (padrão) libera geral — trocar ALLOWED_ORIGINS no .env pra travar
+# no domínio do frontend em produção (ver DEPLOY.md).
+CORS(app, origins=CORS_ORIGINS)
+
+limiter.init_app(app)
 app.register_blueprint(rotas_bp)
+
+
+@app.errorhandler(429)
+def _limite_excedido(e):
+    return jsonify({'erro': 'Muitas requisições — aguarde um instante e tente de novo.'}), 429
+
 
 init_db()
 

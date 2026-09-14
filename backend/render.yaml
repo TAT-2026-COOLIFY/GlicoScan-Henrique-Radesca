@@ -25,3 +25,7 @@ services:
         sync: false
       - key: CALORIE_API_KEY
         sync: false
+      - key: APP_TOKEN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
