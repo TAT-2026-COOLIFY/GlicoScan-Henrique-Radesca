@@ -1,5 +1,7 @@
 # GlicoScan
 
+[![CI](https://github.com/Radesca/GlicoScan/actions/workflows/ci.yml/badge.svg)](https://github.com/Radesca/GlicoScan/actions/workflows/ci.yml)
+
 Calculadora de dose de insulina para pessoas com Diabetes Tipo 1 (DM1), a partir
 da leitura de código de barras ou foto da tabela nutricional de alimentos.
 
