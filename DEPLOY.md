@@ -54,6 +54,10 @@ a serem commitados.
      URL pública do Render lê seu histórico de dose/glicemia e pode
      apagar tudo, sem login nenhum. Anota esse valor — você vai colar o
      mesmo no Vercel no próximo passo.
+   - `DOCTOR_PASSWORD` — opcional. Se preencher, RIC/tipo de insulina/
+     glicemia alvo/fator de sensibilidade ficam só leitura no app até
+     alguém digitar essa senha (desbloqueia por 15min). Deixe em branco
+     se não quiser essa trava — a config fica sempre editável.
    - `ALLOWED_ORIGINS` — deixa **em branco** por enquanto (libera geral).
      Você volta aqui no passo 6 pra travar na URL do Vercel, depois que
      ela existir.

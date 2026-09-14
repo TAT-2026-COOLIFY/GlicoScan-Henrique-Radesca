@@ -169,13 +169,21 @@ uma pessoa:
    — ver `DEPLOY.md`. Frontend manda o token no header `X-App-Token`
    (`frontend/src/api.js`); backend confere em `routes.py`.
 
+8. **PIN por perfil + trava médica (`DOCTOR_PASSWORD`)** — cada perfil pode
+   ter um PIN de 4 dígitos opcional (hash SHA-256, `utils/storage.js`) pra
+   não deixar qualquer um no aparelho trocar livremente pra ele. Separado
+   disso, RIC/tipo de insulina/glicemia alvo/FS ficam só leitura até
+   digitar a senha do médico (`POST /medico/verificar`, desbloqueia por
+   15min na aba — `utils/medico.js`). Ambos opcionais; sem configurar
+   nada, o app funciona como antes (perfis livres, config sempre editável).
+
 ## Perfis (família no mesmo aparelho)
 
 O app suporta múltiplos perfis — pensado pra família usando o mesmo
 celular/computador, cada pessoa com sua própria "regulagem" (RIC, tipo de
-insulina, glicemia alvo, fator de sensibilidade). **Não é sistema de login**:
-qualquer um com acesso ao aparelho troca de perfil livremente, sem senha —
-o controle é de dado, não de segurança entre pessoas.
+insulina, glicemia alvo, fator de sensibilidade). Perfil pode opcionalmente
+ter PIN, mas **não é sistema de login de verdade**: sem PIN configurado,
+qualquer um com acesso ao aparelho troca de perfil livremente.
 
 - Perfis ficam no `localStorage` do navegador (`utils/storage.js`), trocáveis
   pela aba Config. Quem já usava o app antes dessa feature é migrado
@@ -184,3 +192,8 @@ o controle é de dado, não de segurança entre pessoas.
   filtrado por ele nas consultas (`GET /historico?perfil=...`). Linhas salvas
   antes dessa feature (sem perfil gravado) aparecem automaticamente sob
   "Perfil 1", pelo mesmo motivo da migração acima.
+- Edição de RIC/insulina/alvo/FS pode ficar restrita ao médico (senha única
+  compartilhada, não é conta por médico — ver item 8 acima). Sem
+  `DOCTOR_PASSWORD` configurada no backend, esses campos ficam sempre
+  editáveis (o app pergunta em `GET /health` se a trava está ativa antes de
+  mostrar qualquer cadeado).

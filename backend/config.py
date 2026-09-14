@@ -26,6 +26,13 @@ CALORIE_API_KEY  = os.environ.get('CALORIE_API_KEY', '')  # opcional
 # backend for exposto publicamente (ver DEPLOY.md). Vazio = sem trava.
 APP_TOKEN = os.environ.get('APP_TOKEN', '')
 
+# Senha mestra do médico — desbloqueia edição de RIC/insulina/glicemia
+# alvo/fator de sensibilidade (só leitura sem ela). Não é por perfil:
+# é uma senha única que qualquer médico usa, em qualquer aparelho, pra
+# liberar a edição temporariamente. Vazio = trava desativada (config
+# fica sempre editável — comportamento antigo, útil em dev local).
+DOCTOR_PASSWORD = os.environ.get('DOCTOR_PASSWORD', '')
+
 # Origens liberadas pro CORS, separadas por vírgula (ex: a URL do Vercel
 # em produção). '*' (padrão) libera geral — ok em dev local, mas em
 # produção é melhor travar pro domínio do frontend (ver DEPLOY.md).

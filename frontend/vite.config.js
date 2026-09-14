@@ -12,6 +12,7 @@ export default defineConfig({
       '/analisar':     'http://localhost:5000',
       '/buscar':       'http://localhost:5000',
       '/barcode':      'http://localhost:5000',
+      '/medico':       'http://localhost:5000',
       '/historico':    'http://localhost:5000',
       '/stats':        'http://localhost:5000',
       '/health':       'http://localhost:5000',

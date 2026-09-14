@@ -27,5 +27,7 @@ services:
         sync: false
       - key: APP_TOKEN
         sync: false
+      - key: DOCTOR_PASSWORD
+        sync: false
       - key: ALLOWED_ORIGINS
         sync: false

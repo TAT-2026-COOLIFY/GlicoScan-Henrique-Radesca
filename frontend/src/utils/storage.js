@@ -50,6 +50,12 @@ function _salvarBruto(dados) {
   }
 }
 
+/** SHA-256 do PIN — nunca guarda o PIN em texto puro, só o hash. */
+async function _hashPin(pin) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin))
+  return Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 export const storage = {
   listarPerfis: () => {
     const { perfis } = _lerBruto()
@@ -94,5 +100,35 @@ export const storage = {
     if (dados.ativoId === id) dados.ativoId = Object.keys(dados.perfis)[0]
     _salvarBruto(dados)
     return true
+  },
+
+  /** true se esse perfil pede PIN pra entrar. Perfil sem PIN configurado = livre (padrão). */
+  perfilTemPin: (id) => {
+    const dados = _lerBruto()
+    return Boolean(dados.perfis[id]?.pinHash)
+  },
+
+  /** Define (ou troca) o PIN de um perfil. */
+  definirPin: async (id, pin) => {
+    const dados = _lerBruto()
+    if (!dados.perfis[id]) return
+    dados.perfis[id].pinHash = await _hashPin(pin)
+    _salvarBruto(dados)
+  },
+
+  /** Remove o PIN — perfil volta a ser livre pra trocar. */
+  removerPin: (id) => {
+    const dados = _lerBruto()
+    if (!dados.perfis[id]) return
+    delete dados.perfis[id].pinHash
+    _salvarBruto(dados)
+  },
+
+  /** Sem PIN configurado nesse perfil, qualquer PIN "passa" (nada pra checar). */
+  verificarPin: async (id, pinDigitado) => {
+    const dados = _lerBruto()
+    const hashSalvo = dados.perfis[id]?.pinHash
+    if (!hashSalvo) return true
+    return (await _hashPin(pinDigitado)) === hashSalvo
   },
 }

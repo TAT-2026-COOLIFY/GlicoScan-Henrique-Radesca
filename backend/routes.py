@@ -13,7 +13,7 @@ from flask import Blueprint, request, jsonify
 
 import database as db
 import parsing
-from config import OCR_API_KEY, CALORIE_API_KEY, APP_TOKEN
+from config import OCR_API_KEY, CALORIE_API_KEY, APP_TOKEN, DOCTOR_PASSWORD
 from extensions import limiter
 from services import ocr, openfoodfacts, usda, fatsecret
 
@@ -277,6 +277,19 @@ def stats():
     return jsonify(db.obter_estatisticas(perfil=request.args.get('perfil')))
 
 
+# ── Trava médica (RIC/insulina/glicemia alvo/FS só editável com senha) ──
+
+@bp.route('/medico/verificar', methods=['POST'])
+@limiter.limit('5 per minute')  # poucas tentativas — é senha compartilhada entre médicos
+def verificar_senha_medico():
+    if not DOCTOR_PASSWORD:
+        return jsonify({'erro': 'Trava do médico não configurada neste servidor'}), 400
+    dados = request.get_json(silent=True) or {}
+    if dados.get('senha') != DOCTOR_PASSWORD:
+        return jsonify({'erro': 'Senha incorreta'}), 401
+    return jsonify({'ok': True})
+
+
 # ── Utilitárias ──────────────────────────────────────────────────
 
 @bp.route('/health')
@@ -288,6 +301,9 @@ def health():
         'fatsecret': 'configurado',
         'off': 'v2',
         'cache': 'SQLite',
+        # Frontend usa isso pra saber se deve mostrar o cadeado da config
+        # clínica — sem DOCTOR_PASSWORD configurada, fica sempre editável.
+        'trava_medica': bool(DOCTOR_PASSWORD),
     })
 
 
