@@ -21,3 +21,16 @@ export const DEFAULT_PROFILE = {
   alvo: 100,                      // Glicemia alvo (mg/dL)
   fs: 50,                         // Fator de Sensibilidade (quanto 1 UI reduz a glicemia)
 }
+
+// Duração da ação de cada insulina (horas) — usado pro cálculo de IOB
+// (insulina ativa/"bolus na ativa"): dose recente ainda circulando no
+// corpo, que precisa ser descontada da próxima dose pra não empilhar
+// insulina e causar hipoglicemia. Valores de bula, aproximados —
+// sempre validar com o médico, igual o resto da regulagem.
+export const DURACAO_INSULINA_HORAS = {
+  'Humalog (lispro)':     4,
+  'NovoRapid (aspart)':   4,
+  'Apidra (glulisina)':   4,
+  'Fiasp (ultra-rápida)': 3,
+  'Regular':              6,
+}

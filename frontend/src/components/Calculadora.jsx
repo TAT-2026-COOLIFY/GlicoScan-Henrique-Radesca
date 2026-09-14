@@ -15,9 +15,10 @@
 
 import { useState, useEffect } from 'react'
 import { C } from '../theme'
-import { INSULIN_TIPS } from '../constants'
+import { INSULIN_TIPS, DURACAO_INSULINA_HORAS } from '../constants'
 import { storage } from '../utils/storage'
 import { valorSuspeito, gerarDescricao } from '../utils/nutrition'
+import { calcularIOB } from '../utils/iob'
 import { Card } from './Layout'
 import { apiFetch } from '../api'
 
@@ -38,10 +39,22 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte }) {
   const [resultado, setResultado]   = useState(null)
   const [confirmado, setConfirmado] = useState(false)
   const [salvou, setSalvou]         = useState(false)
+  const [iobAtivo, setIobAtivo]     = useState(0)
 
   const camposSuspeitos = CAMPOS_NUTRICIONAIS
     .map(([chave]) => chave)
     .filter(chave => valorSuspeito(chave, editNut[chave], editNut.porcao))
+
+  // Insulina ativa (IOB) de doses recentes — busca só uma vez, ao entrar
+  // na tela de resultado, não a cada tecla digitada.
+  useEffect(() => {
+    const perfil = storage.getPerfilAtivo()
+    const duracao = DURACAO_INSULINA_HORAS[perfil.insulin] || 4
+    apiFetch(`/historico?perfil=${encodeURIComponent(perfil.nome)}`)
+      .then(r => r.json())
+      .then(historico => setIobAtivo(calcularIOB(Array.isArray(historico) ? historico : [], duracao)))
+      .catch(() => setIobAtivo(0))
+  }, [])
 
   const calcular = (porcoesAtuais = portions) => {
     const perfil = storage.getPerfilAtivo()
@@ -58,7 +71,8 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte }) {
     }
 
     const correcao = glicemiaMgdl > 0 ? (glicemiaMgdl - alvo) / fs : 0
-    const doseTotal = Math.max(0, Math.round((doseBase + correcao) * 2) / 2)
+    const iob = Math.round(iobAtivo * 2) / 2
+    const doseTotal = Math.max(0, Math.round((doseBase + correcao - iob) * 2) / 2)
     const agora = new Date()
 
     setResultado({
@@ -78,8 +92,10 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte }) {
       dose: doseTotal,
       doseBase: Math.round(doseBase * 2) / 2,
       doseCorrecao: Math.round(correcao * 2) / 2,
+      doseIOB: iob,
       insulina: perfil.insulin,
       perfil: perfil.nome,
+      modoSimples: Boolean(perfil.modoSimples),
       glicemiaAtual: glicemiaMgdl,
       descricao: gerarDescricao(porcoesAtuais, editNut.porcao, editNut.unidade),
       time: `${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`,
@@ -87,11 +103,11 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte }) {
     })
   }
 
-  // Recalcula automaticamente ao mudar porções ou editar valores nutricionais
+  // Recalcula automaticamente ao mudar porções, valores nutricionais ou o IOB (chega depois, assíncrono)
   useEffect(() => {
     if (confirmado) calcular(portions)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portions, editNut])
+  }, [portions, editNut, iobAtivo])
 
   const salvarNoHistorico = async () => {
     if (!resultado || salvou) return
@@ -301,17 +317,20 @@ function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, onEditar, on
           {resultado.perfil && <div style={{ fontSize:11, color:C.accent, fontWeight:600 }}>👤 {resultado.perfil}</div>}
         </div>
 
-        <div style={{ display:'flex', alignItems:'flex-end', gap:8, marginBottom:resultado.doseCorrecao?8:16 }}>
+        <div style={{ display:'flex', alignItems:'flex-end', gap:8, marginBottom:(resultado.doseCorrecao || resultado.doseIOB)?8:16 }}>
           <span style={{ fontSize:72, fontWeight:800, color:C.accent, lineHeight:1, textShadow:`0 0 40px ${C.accentGlow}`, animation:'numberPop .4s ease' }}>{resultado.dose}</span>
           <span style={{ fontSize:20, color:C.text3, paddingBottom:10 }}>UI</span>
         </div>
 
-        {resultado.doseCorrecao !== 0 && (
+        {!resultado.modoSimples && (resultado.doseCorrecao !== 0 || resultado.doseIOB > 0) && (
           <div style={{ fontSize:12, color:C.text2, marginBottom:16, padding:'8px 12px', background:'rgba(255,255,255,.03)', borderRadius:10, border:`1px solid ${C.border}` }}>
             Base: <strong style={{ color:C.text }}>{resultado.doseBase} UI</strong>
             {resultado.doseCorrecao > 0
               ? <> + correção: <strong style={{ color:C.danger }}>+{resultado.doseCorrecao} UI</strong></>
-              : <> − desconto: <strong style={{ color:C.green }}>{resultado.doseCorrecao} UI</strong></>}
+              : resultado.doseCorrecao < 0
+              ? <> − desconto: <strong style={{ color:C.green }}>{resultado.doseCorrecao} UI</strong></>
+              : null}
+            {resultado.doseIOB > 0 && <> − insulina ativa: <strong style={{ color:C.green }}>-{resultado.doseIOB} UI</strong></>}
           </div>
         )}
 
@@ -329,14 +348,16 @@ function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, onEditar, on
           <span>{dicaInsulina.icone}</span><span><strong>{resultado.insulina}</strong> — aplique <strong>{dicaInsulina.tempo}</strong></span>
         </div>
 
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:8 }}>
-          {[['Carbo', resultado.carboTotal+'g'], ['RIC', '1:'+resultado.ric], ['Porções', resultado.porcoes+'x'], ['Hora', resultado.time]].map(([l, v]) => (
-            <div key={l} style={{ textAlign:'center', padding:'8px 4px', background:'rgba(255,255,255,.03)', borderRadius:10, border:`1px solid ${C.border}` }}>
-              <div style={{ fontSize:13, color:C.text, fontWeight:700, marginBottom:2 }}>{v}</div>
-              <div style={{ fontSize:9, color:C.text3, letterSpacing:.5, textTransform:'uppercase' }}>{l}</div>
-            </div>
-          ))}
-        </div>
+        {!resultado.modoSimples && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:8 }}>
+            {[['Carbo', resultado.carboTotal+'g'], ['RIC', '1:'+resultado.ric], ['Porções', resultado.porcoes+'x'], ['Hora', resultado.time]].map(([l, v]) => (
+              <div key={l} style={{ textAlign:'center', padding:'8px 4px', background:'rgba(255,255,255,.03)', borderRadius:10, border:`1px solid ${C.border}` }}>
+                <div style={{ fontSize:13, color:C.text, fontWeight:700, marginBottom:2 }}>{v}</div>
+                <div style={{ fontSize:9, color:C.text3, letterSpacing:.5, textTransform:'uppercase' }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {resultado.dose === 0 && (
           <div style={{ marginTop:14, padding:'10px 14px', background:C.greenDim, border:'1px solid rgba(0,229,160,.2)', borderRadius:12, fontSize:13, color:C.green }}>

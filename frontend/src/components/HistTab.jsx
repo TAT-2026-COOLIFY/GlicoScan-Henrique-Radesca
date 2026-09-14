@@ -9,6 +9,8 @@ import { useState, useEffect } from 'react'
 import { C } from '../theme'
 import { apiFetch } from '../api'
 import { storage } from '../utils/storage'
+import { gerarCSV, baixarArquivo } from '../utils/exportar'
+import { detectarPadroes } from '../utils/padroes'
 
 export default function HistTab({ showToast }) {
   const [list, setList]       = useState([])
@@ -46,6 +48,14 @@ export default function HistTab({ showToast }) {
     carregar()
   }
 
+  const exportarCSV = () => {
+    const nomePerfil = storage.getPerfilAtivo().nome
+    baixarArquivo(gerarCSV(list), `glicoscan-${nomePerfil}.csv`, 'text/csv;charset=utf-8;')
+    showToast('📄 CSV baixado')
+  }
+
+  const padroes = detectarPadroes(list)
+
   if (loading) {
     return (
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:300 }}>
@@ -59,6 +69,7 @@ export default function HistTab({ showToast }) {
       <div style={{ fontSize:11, color:C.text3, marginBottom:12, textAlign:'center' }}>
         Histórico de <span style={{ color:C.accent, fontWeight:700 }}>{storage.getPerfilAtivo().nome}</span>
       </div>
+      {padroes.length > 0 && <AlertasDePadrao padroes={padroes} />}
       {stats?.total_calculos > 0 && <ResumoEstatisticas stats={stats} />}
       {stats?.por_dia?.length >= 2 && (
         <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:18, padding:'14px 16px', marginBottom:16 }}>
@@ -74,12 +85,39 @@ export default function HistTab({ showToast }) {
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
             {list.map((h, i) => <ItemHistorico key={h.id} h={h} index={i} onRemover={() => remover(h.id)} />)}
           </div>
-          <button onClick={limparTudo}
-            style={{ width:'100%', padding:13, background:'none', border:`1px solid rgba(255,77,109,.2)`, borderRadius:14, color:C.danger, fontFamily:'inherit', fontSize:13, cursor:'pointer', marginTop:14, opacity:.7 }}>
-            🗑️ Limpar todo o histórico
-          </button>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:14 }}>
+            <button onClick={exportarCSV}
+              style={{ padding:13, background:'none', border:`1px solid ${C.border}`, borderRadius:14, color:C.text2, fontFamily:'inherit', fontSize:13, cursor:'pointer' }}>
+              📄 Exportar CSV
+            </button>
+            <button onClick={limparTudo}
+              style={{ padding:13, background:'none', border:`1px solid rgba(255,77,109,.2)`, borderRadius:14, color:C.danger, fontFamily:'inherit', fontSize:13, cursor:'pointer', opacity:.7 }}>
+              🗑️ Limpar tudo
+            </button>
+          </div>
         </>
       )}
+    </div>
+  )
+}
+
+function AlertasDePadrao({ padroes }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
+      {padroes.map(({ tipo, periodo, ocorrencias }) => {
+        const hipo = tipo === 'hipo'
+        const cor = hipo ? C.danger : C.warn
+        return (
+          <div key={`${tipo}-${periodo}`}
+            style={{ background:`${cor}15`, border:`1px solid ${cor}40`, borderRadius:14, padding:'12px 14px', display:'flex', gap:10, alignItems:'flex-start' }}>
+            <span style={{ fontSize:16 }}>⚠️</span>
+            <div style={{ fontSize:12, color:C.text2, lineHeight:1.5 }}>
+              <strong style={{ color:cor }}>{hipo ? 'Hipoglicemia' : 'Hiperglicemia'} recorrente à {periodo}</strong> —
+              {' '}{ocorrencias}x registrado. Vale revisar {hipo ? 'RIC/FS' : 'RIC'} desse horário com seu médico.
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

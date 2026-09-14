@@ -197,3 +197,31 @@ qualquer um com acesso ao aparelho troca de perfil livremente.
   `DOCTOR_PASSWORD` configurada no backend, esses campos ficam sempre
   editáveis (o app pergunta em `GET /health` se a trava está ativa antes de
   mostrar qualquer cadeado).
+
+## Funcionalidades extras (pós-perfis)
+
+1. **IOB — insulina ativa** (`utils/iob.js`) — antes de calcular uma nova
+   dose, o app busca o histórico recente do perfil e desconta a insulina de
+   doses ainda "ativas" (decaimento linear até a duração da insulina em uso,
+   ver `DURACAO_INSULINA_HORAS` em `constants.js`). Evita empilhar insulina
+   se a pessoa comer de novo pouco tempo depois da última dose.
+
+2. **Exportar histórico em CSV** (`utils/exportar.js`, botão na aba
+   Histórico) — abre em qualquer planilha, pra levar pronto numa consulta.
+   Sem dependência nova (nada de lib de PDF).
+
+3. **Alerta de padrão de hipo/hiperglicemia** (`utils/padroes.js`) —
+   varre o histórico do perfil e avisa quando hipo (<70) ou hiper (>180)
+   se repete 3+ vezes no mesmo período do dia (madrugada/manhã/tarde/noite).
+   Não é diagnóstico, só aponta o padrão pra discutir com o médico.
+
+4. **Backup/restauração de perfis** (botões "Exportar/Importar perfis" na
+   aba Config) — baixa um JSON com todos os perfis (RIC, insulina, PIN como
+   hash) e restaura depois, útil ao trocar de aparelho. Importar substitui
+   os perfis atuais — pede confirmação antes.
+
+5. **Modo Simples** (toggle por perfil, aba Config) — tela de resultado da
+   dose fica só com o essencial (dose, insulina, o que comer), sem a
+   quebra técnica de base/correção/IOB nem a grade de detalhes. Pensado
+   pro próprio paciente (se for criança) usar sem se perder em número
+   técnico.

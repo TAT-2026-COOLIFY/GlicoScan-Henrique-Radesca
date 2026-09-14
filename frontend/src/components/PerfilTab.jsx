@@ -21,11 +21,12 @@
 // dígitos (hash SHA-256, nunca texto puro — ver utils/storage.js) pra
 // não deixar qualquer um no aparelho trocar livremente pra ele.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { C } from '../theme'
 import { INSULIN_TIPS } from '../constants'
 import { storage } from '../utils/storage'
 import { medico } from '../utils/medico'
+import { baixarArquivo } from '../utils/exportar'
 import { apiFetch } from '../api'
 import { Card } from './Layout'
 
@@ -75,6 +76,8 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
   const [erros, setErros]           = useState({})
   const [criandoNovo, setCriandoNovo] = useState(false)
   const [novoNome, setNovoNome]       = useState('')
+  const [modoSimples, setModoSimples] = useState(false)
+  const inputBackupRef = useRef(null)
 
   // Troca de perfil protegida por PIN — se o alvo tem PIN, fica pendente
   // aqui até confirmar, em vez de trocar na hora.
@@ -103,9 +106,44 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
   useEffect(() => {
     const p = storage.getPerfilAtivo()
     setNome(p.nome); setRic(p.ric); setInsulin(p.insulin); setAlvo(p.alvo); setFs(p.fs)
+    setModoSimples(Boolean(p.modoSimples))
     setErros({})
     setGerenciandoPin(false); setPinNovo('')
   }, [perfilId])
+
+  const alternarModoSimples = () => {
+    const novoValor = !modoSimples
+    setModoSimples(novoValor)
+    storage.salvarPerfil(perfilId, { modoSimples: novoValor })
+  }
+
+  const exportarBackup = () => {
+    baixarArquivo(storage.exportarTudo(), 'glicoscan-perfis-backup.json', 'application/json')
+    showToast('💾 Backup baixado')
+  }
+
+  const importarBackup = (arquivo) => {
+    if (!arquivo) return
+    if (!confirm('Importar vai substituir TODOS os perfis atuais pelos do backup. Continuar?')) {
+      if (inputBackupRef.current) inputBackupRef.current.value = ''
+      return
+    }
+    const leitor = new FileReader()
+    leitor.onload = () => {
+      try {
+        storage.importarTudo(leitor.result)
+        setPerfis(storage.listarPerfis())
+        setPerfilId(storage.getPerfilAtivo().id)
+        onPerfilMudou?.()
+        showToast('✓ Backup restaurado!')
+      } catch (e) {
+        showToast(`⚠️ ${e.message}`, 'err')
+      } finally {
+        if (inputBackupRef.current) inputBackupRef.current.value = ''
+      }
+    }
+    leitor.readAsText(arquivo)
+  }
 
   const _trocarDireto = (id) => {
     storage.definirPerfilAtivo(id)
@@ -256,6 +294,17 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
           onAbrir={() => setGerenciandoPin(true)} onFechar={() => { setGerenciandoPin(false); setPinNovo('') }}
           onMudarPin={setPinNovo} onDefinir={definirPinAtual} onRemover={removerPinAtual} />
 
+        <div onClick={alternarModoSimples}
+          style={{ margin:'6px 0 16px', padding:'10px 14px', background:C.surface2, borderRadius:14, border:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer' }}>
+          <div>
+            <div style={{ fontSize:12, color:C.text2, fontWeight:600 }}>🧒 Modo Simples</div>
+            <div style={{ fontSize:10, color:C.text3, marginTop:2 }}>Tela de resultado só com o essencial</div>
+          </div>
+          <div style={{ width:40, height:22, borderRadius:100, background:modoSimples?C.accent:C.surface3, border:`1px solid ${modoSimples?C.accent:C.border}`, position:'relative', flexShrink:0, transition:'all .2s' }}>
+            <div style={{ width:16, height:16, borderRadius:'50%', background:'#020C18', position:'absolute', top:2, left:modoSimples?21:2, transition:'all .2s' }} />
+          </div>
+        </div>
+
         {travaAtiva && (
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
             <div style={{ fontSize:10, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:C.text3 }}>⚙️ Configuração</div>
@@ -305,6 +354,19 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
         style={{ width:'100%', padding:16, background:saved?C.greenDim:`linear-gradient(135deg,${C.accent},#0099CC)`, border:saved?`1px solid rgba(0,229,160,.3)`:'none', borderRadius:16, color:saved?C.green:'#020C18', fontFamily:'inherit', fontSize:15, fontWeight:700, cursor:'pointer', transition:'all .3s', boxShadow:saved?'none':`0 8px 32px ${C.accentGlow}` }}>
         {saved ? '✓ Salvo com sucesso!' : '✓ Salvar Perfil'}
       </button>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:10 }}>
+        <button onClick={exportarBackup}
+          style={{ padding:12, background:'none', border:`1px solid ${C.border}`, borderRadius:14, color:C.text3, fontFamily:'inherit', fontSize:12, cursor:'pointer' }}>
+          💾 Exportar perfis
+        </button>
+        <button onClick={() => inputBackupRef.current?.click()}
+          style={{ padding:12, background:'none', border:`1px solid ${C.border}`, borderRadius:14, color:C.text3, fontFamily:'inherit', fontSize:12, cursor:'pointer' }}>
+          📂 Importar perfis
+        </button>
+        <input ref={inputBackupRef} type="file" accept="application/json" style={{ display:'none' }}
+          onChange={e => importarBackup(e.target.files?.[0])} />
+      </div>
     </div>
   )
 }

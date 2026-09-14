@@ -167,6 +167,31 @@ describe('storage — PIN por perfil', () => {
   })
 })
 
+describe('storage — backup/restauração (exportarTudo/importarTudo)', () => {
+  it('exportarTudo devolve um JSON que dá pra reimportar igual', async () => {
+    const storage = await getStorage()
+    storage.criarPerfil('Ana')
+    const backup = storage.exportarTudo()
+
+    localStorage.clear()
+    const storage2 = await getStorage()
+    storage2.importarTudo(backup)
+
+    expect(storage2.listarPerfis().map(p => p.nome).sort()).toEqual(['Ana', 'Perfil 1'])
+  })
+
+  it('importarTudo rejeita JSON inválido, sem apagar o que já existia', async () => {
+    const storage = await getStorage()
+    expect(() => storage.importarTudo('{ isso não é json')).toThrow()
+    expect(storage.listarPerfis()).toHaveLength(1)
+  })
+
+  it('importarTudo rejeita arquivo sem formato de backup do app', async () => {
+    const storage = await getStorage()
+    expect(() => storage.importarTudo(JSON.stringify({ qualquer: 'coisa' }))).toThrow()
+  })
+})
+
 describe('storage — dado corrompido no localStorage', () => {
   it('reseta pro padrão em vez de quebrar quando gs_perfis tem JSON inválido', async () => {
     localStorage.setItem('gs_perfis', '{ isso não é json')

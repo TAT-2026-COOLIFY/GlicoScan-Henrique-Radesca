@@ -131,4 +131,21 @@ export const storage = {
     if (!hashSalvo) return true
     return (await _hashPin(pinDigitado)) === hashSalvo
   },
+
+  /** Backup de todos os perfis (RIC/insulina/alvo/FS/PIN — como hash) num JSON legível. */
+  exportarTudo: () => JSON.stringify(_lerBruto(), null, 2),
+
+  /** Restaura perfis de um backup exportado antes. Substitui os perfis atuais — sem volta. */
+  importarTudo: (json) => {
+    let dados
+    try {
+      dados = JSON.parse(json)
+    } catch {
+      throw new Error('Arquivo não é um JSON válido')
+    }
+    if (!dados || typeof dados !== 'object' || !dados.perfis || !Object.keys(dados.perfis).length) {
+      throw new Error('Arquivo não tem o formato de um backup do GlicoScan')
+    }
+    _salvarBruto(dados)
+  },
 }
