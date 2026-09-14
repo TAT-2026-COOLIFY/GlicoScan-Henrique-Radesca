@@ -1,5 +1,12 @@
 # Deploy do GlicoScan em produção
 
+> ✅ **Já feito.** App no ar em:
+> - Frontend: https://glico-scan.vercel.app
+> - Backend: https://glicoscan.onrender.com
+>
+> O guia abaixo fica como referência — pra reproduzir do zero (outra
+> conta, outro projeto) ou pra lembrar como cada peça foi configurada.
+
 Guia passo a passo pra tirar o app do ngrok/localhost e colocar num link
 fixo, público, sem depender do seu PC ligado.
 

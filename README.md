@@ -7,6 +7,9 @@ da leitura de código de barras ou foto da tabela nutricional de alimentos.
 
 TCC — Curso de Análise e Desenvolvimento de Sistemas (ADS), FEMA.
 
+**App no ar**: https://glico-scan.vercel.app
+**API**: https://glicoscan.onrender.com (plano free — "dorme" após 15min sem uso, primeira chamada demora ~30-50s pra acordar)
+
 ## Arquitetura
 
 ```
