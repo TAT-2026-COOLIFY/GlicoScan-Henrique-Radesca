@@ -225,3 +225,12 @@ qualquer um com acesso ao aparelho troca de perfil livremente.
    quebra técnica de base/correção/IOB nem a grade de detalhes. Pensado
    pro próprio paciente (se for criança) usar sem se perder em número
    técnico.
+
+6. **Correção sem alimento** (botão "🩸 Só corrigir glicemia" na aba Scan)
+   — calcula só a dose de correção (glicemia alta, sem ter comido nada),
+   reaproveitando a mesma `Calculadora.jsx` com nutrição zerada e pulando
+   a etapa de confirmação de alimento. Ainda desconta IOB normalmente.
+
+7. **Gráfico de glicemia** — o mini-gráfico de evolução do Histórico
+   ganhou uma terceira linha com a glicemia média por dia
+   (`AVG(glicemia_atual)` no backend, ignorando dias sem registro).

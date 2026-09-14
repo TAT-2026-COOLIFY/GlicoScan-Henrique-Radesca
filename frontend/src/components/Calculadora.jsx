@@ -31,13 +31,14 @@ const CAMPOS_NUTRICIONAIS = [
   ['gorduras',     '🧈 Gorduras',     'g',    C.orange],
 ]
 
-export default function Calculadora({ nutrition, showToast, onReset, fonte }) {
+export default function Calculadora({ nutrition, showToast, onReset, fonte, somenteCorrecao = false }) {
   const [editNut, setEditNut]       = useState({ ...nutrition })
   const [portions, setPortions]     = useState(1)
   const [nomeProd, setNomeProd]     = useState(nutrition.produto || '')
   const [glicemia, setGlicemia]     = useState('')
   const [resultado, setResultado]   = useState(null)
-  const [confirmado, setConfirmado] = useState(false)
+  // Correção sem alimento pula direto pro resultado — não tem nutrição pra confirmar
+  const [confirmado, setConfirmado] = useState(somenteCorrecao)
   const [salvou, setSalvou]         = useState(false)
   const [iobAtivo, setIobAtivo]     = useState(0)
 
@@ -89,6 +90,8 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte }) {
       carboTotal,
       porcoes: porcoesAtuais,
       ric,
+      alvo,
+      fs,
       dose: doseTotal,
       doseBase: Math.round(doseBase * 2) / 2,
       doseCorrecao: Math.round(correcao * 2) / 2,
@@ -96,8 +99,9 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte }) {
       insulina: perfil.insulin,
       perfil: perfil.nome,
       modoSimples: Boolean(perfil.modoSimples),
+      somenteCorrecao,
       glicemiaAtual: glicemiaMgdl,
-      descricao: gerarDescricao(porcoesAtuais, editNut.porcao, editNut.unidade),
+      descricao: somenteCorrecao ? 'Correção sem alimento' : gerarDescricao(porcoesAtuais, editNut.porcao, editNut.unidade),
       time: `${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`,
       date: `${String(agora.getDate()).padStart(2,'0')}/${String(agora.getMonth()+1).padStart(2,'0')}`,
     })
@@ -152,6 +156,7 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte }) {
       onEditar={() => { setConfirmado(false); setResultado(null) }}
       onReset={onReset}
       onBlurGlicemia={() => calcular(portions)}
+      somenteCorrecao={somenteCorrecao}
     />
   )
 }
@@ -239,28 +244,30 @@ function TelaConfirmacao({ editNut, setEditNut, nomeProd, setNomeProd, camposSus
 }
 
 // ── Subcomponente: tela de resultado (dose calculada) ─────────────
-function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, resultado, dicaInsulina, salvou, onSalvar, onEditar, onReset, onBlurGlicemia }) {
+function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, resultado, dicaInsulina, salvou, onSalvar, onEditar, onReset, onBlurGlicemia, somenteCorrecao }) {
   return (
     <div style={{ padding:'16px 16px 28px' }}>
       <Card style={{ marginBottom:14 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', borderBottom:`1px solid ${C.border}` }}>
-          <div>
-            <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:4 }}>Porções</div>
-            <div style={{ fontSize:12, color:C.accent, marginTop:4 }}>🍽️ {gerarDescricao(portions, editNut.porcao, editNut.unidade)}</div>
-            <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>{+((editNut.carboidratos || 0) * portions).toFixed(1)}g de carboidrato</div>
+        {!somenteCorrecao && (
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', borderBottom:`1px solid ${C.border}` }}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:4 }}>Porções</div>
+              <div style={{ fontSize:12, color:C.accent, marginTop:4 }}>🍽️ {gerarDescricao(portions, editNut.porcao, editNut.unidade)}</div>
+              <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>{+((editNut.carboidratos || 0) * portions).toFixed(1)}g de carboidrato</div>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:14, overflow:'hidden' }}>
+              <button onClick={() => setPortions(p => +(Math.max(0.5, p - .5).toFixed(1)))} style={{ width:40, height:42, background:'none', border:'none', color:C.accent, fontSize:20, cursor:'pointer' }}>−</button>
+              <div style={{ width:44, textAlign:'center', fontSize:18, fontWeight:700, color:C.accent, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}` }}>{portions}</div>
+              <button onClick={() => setPortions(p => +(Math.min(20, p + .5).toFixed(1)))} style={{ width:40, height:42, background:'none', border:'none', color:C.accent, fontSize:20, cursor:'pointer' }}>+</button>
+            </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:14, overflow:'hidden' }}>
-            <button onClick={() => setPortions(p => +(Math.max(0.5, p - .5).toFixed(1)))} style={{ width:40, height:42, background:'none', border:'none', color:C.accent, fontSize:20, cursor:'pointer' }}>−</button>
-            <div style={{ width:44, textAlign:'center', fontSize:18, fontWeight:700, color:C.accent, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}` }}>{portions}</div>
-            <button onClick={() => setPortions(p => +(Math.min(20, p + .5).toFixed(1)))} style={{ width:40, height:42, background:'none', border:'none', color:C.accent, fontSize:20, cursor:'pointer' }}>+</button>
-          </div>
-        </div>
+        )}
 
         <div style={{ padding:'14px 18px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>
-            <span style={{ fontSize:13, color:C.text2, flex:1 }}>🩸 Glicemia atual <span style={{ fontSize:11, color:C.text3 }}>(opcional)</span></span>
+            <span style={{ fontSize:13, color:C.text2, flex:1 }}>🩸 Glicemia atual {!somenteCorrecao && <span style={{ fontSize:11, color:C.text3 }}>(opcional)</span>}</span>
             <input type="text" value={glicemia} onChange={e => setGlicemia(e.target.value)} onBlur={onBlurGlicemia}
-              placeholder="ex: 120"
+              placeholder="ex: 120" autoFocus={somenteCorrecao}
               style={{ width:90, padding:'8px 12px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, fontSize:14, outline:'none', fontFamily:'inherit', textAlign:'center', fontWeight:600 }} />
           </div>
           <IndicadorGlicemia glicemia={glicemia} />
@@ -304,7 +311,7 @@ function AvisoMedico() {
 function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, onEditar, onReset }) {
   const botoes = [
     [salvou ? '✅ Salvo!' : '💾 Salvar', C.green, 'rgba(0,229,160,.1)', 'rgba(0,229,160,.25)', onSalvar],
-    ['✏️ Editar', C.accent, C.accentDim, 'rgba(0,212,255,.25)', onEditar],
+    ...(resultado.somenteCorrecao ? [] : [['✏️ Editar', C.accent, C.accentDim, 'rgba(0,212,255,.25)', onEditar]]),
     ['🔄 Novo', C.text3, 'transparent', C.border, onReset],
   ]
 
@@ -335,7 +342,7 @@ function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, onEditar, on
         )}
 
         <div style={{ padding:'10px 14px', background:C.accentDim, border:`1px solid rgba(0,212,255,.15)`, borderRadius:12, fontSize:13, color:C.accent, fontWeight:500, marginBottom:resultado.embalagem?8:12 }}>
-          🍽️ {resultado.descricao}
+          {resultado.somenteCorrecao ? '🩸' : '🍽️'} {resultado.descricao}
         </div>
 
         {resultado.embalagem && (
@@ -350,7 +357,10 @@ function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, onEditar, on
 
         {!resultado.modoSimples && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:8 }}>
-            {[['Carbo', resultado.carboTotal+'g'], ['RIC', '1:'+resultado.ric], ['Porções', resultado.porcoes+'x'], ['Hora', resultado.time]].map(([l, v]) => (
+            {(resultado.somenteCorrecao
+              ? [['Alvo', resultado.alvo+' mg/dL'], ['Atual', resultado.glicemiaAtual+' mg/dL'], ['FS', '1:'+resultado.fs], ['Hora', resultado.time]]
+              : [['Carbo', resultado.carboTotal+'g'], ['RIC', '1:'+resultado.ric], ['Porções', resultado.porcoes+'x'], ['Hora', resultado.time]]
+            ).map(([l, v]) => (
               <div key={l} style={{ textAlign:'center', padding:'8px 4px', background:'rgba(255,255,255,.03)', borderRadius:10, border:`1px solid ${C.border}` }}>
                 <div style={{ fontSize:13, color:C.text, fontWeight:700, marginBottom:2 }}>{v}</div>
                 <div style={{ fontSize:9, color:C.text3, letterSpacing:.5, textTransform:'uppercase' }}>{l}</div>
@@ -361,12 +371,12 @@ function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, onEditar, on
 
         {resultado.dose === 0 && (
           <div style={{ marginTop:14, padding:'10px 14px', background:C.greenDim, border:'1px solid rgba(0,229,160,.2)', borderRadius:12, fontSize:13, color:C.green }}>
-            ✅ Sem carboidratos — nenhuma dose necessária!
+            {resultado.somenteCorrecao ? '✅ Dentro da meta — sem necessidade de correção!' : '✅ Sem carboidratos — nenhuma dose necessária!'}
           </div>
         )}
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${botoes.length},1fr)`, gap:10 }}>
         {botoes.map(([label, cor, bg, border, fn]) => (
           <button key={label} onClick={fn} style={{ padding:'13px 8px', background:bg, border:`1px solid ${border}`, borderRadius:14, color:cor, fontFamily:'inherit', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all .2s' }}>
             {label}

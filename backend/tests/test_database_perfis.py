@@ -72,3 +72,19 @@ def test_estatisticas_sao_calculadas_por_perfil(banco_temporario):
     stats_ana = db.obter_estatisticas(perfil='Ana')
     assert stats_ana['total_calculos'] == 2
     assert stats_ana['media_carbo_por_refeicao'] == 20.0
+
+
+def test_por_dia_traz_media_de_glicemia_ignorando_zeros(banco_temporario):
+    db.adicionar_historico({'produto': 'A', 'carboTotal': 10, 'dose': 1, 'perfil': 'Ana', 'glicemiaAtual': 100})
+    db.adicionar_historico({'produto': 'B', 'carboTotal': 10, 'dose': 1, 'perfil': 'Ana', 'glicemiaAtual': 200})
+    db.adicionar_historico({'produto': 'C', 'carboTotal': 10, 'dose': 1, 'perfil': 'Ana', 'glicemiaAtual': 0})  # sem glicemia registrada
+
+    stats = db.obter_estatisticas(perfil='Ana')
+    assert stats['por_dia'][0]['glicemia'] == 150.0  # média de 100 e 200 só — o 0 não conta
+
+
+def test_por_dia_sem_nenhuma_glicemia_registrada_no_dia_fica_none(banco_temporario):
+    db.adicionar_historico({'produto': 'A', 'carboTotal': 10, 'dose': 1, 'perfil': 'Ana'})
+
+    stats = db.obter_estatisticas(perfil='Ana')
+    assert stats['por_dia'][0]['glicemia'] is None

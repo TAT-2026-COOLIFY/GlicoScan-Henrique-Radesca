@@ -22,6 +22,7 @@ export default function ScanTab({ showToast }) {
   const [notFound, setNotFound]   = useState(false)
   const [busca, setBusca]         = useState('')
   const [sugestoes, setSugestoes] = useState([])
+  const [somenteCorrecao, setSomenteCorrecao] = useState(false)
 
   const handleBarcode = async (code) => {
     if (loading) return
@@ -50,7 +51,15 @@ export default function ScanTab({ showToast }) {
 
   const reset = () => {
     setNutrition(null); setLastCode(null); setScanning(false)
-    setNotFound(false); setBusca(''); setSugestoes([])
+    setNotFound(false); setBusca(''); setSugestoes([]); setSomenteCorrecao(false)
+  }
+
+  const iniciarCorrecaoSemAlimento = () => {
+    setNutrition({
+      produto: 'Correção de glicemia', porcao: '', unidade: '',
+      calorias: 0, carboidratos: 0, acucares: 0, fibras: 0, proteinas: 0, gorduras: 0, texto_bruto: '',
+    })
+    setSomenteCorrecao(true)
   }
 
   const buscarPorNome = async (nome) => {
@@ -78,12 +87,13 @@ export default function ScanTab({ showToast }) {
   }
 
   if (nutrition) {
-    return <Calculadora nutrition={nutrition} showToast={showToast} onReset={reset} fonte="Open Food Facts" />
+    return <Calculadora nutrition={nutrition} showToast={showToast} onReset={reset}
+      fonte={somenteCorrecao ? null : 'Open Food Facts'} somenteCorrecao={somenteCorrecao} />
   }
 
   return (
     <div style={{ padding:'16px 16px 28px' }}>
-      {!scanning && !loading && <TelaInicial onAbrirScanner={() => setScanning(true)} />}
+      {!scanning && !loading && <TelaInicial onAbrirScanner={() => setScanning(true)} onCorrecaoSemAlimento={iniciarCorrecaoSemAlimento} />}
 
       {loading && (
         <div style={{ textAlign:'center', padding:'60px 0', animation:'fadeIn .3s ease' }}>
@@ -106,7 +116,7 @@ export default function ScanTab({ showToast }) {
   )
 }
 
-function TelaInicial({ onAbrirScanner }) {
+function TelaInicial({ onAbrirScanner, onCorrecaoSemAlimento }) {
   return (
     <>
       <div style={{ background:`linear-gradient(135deg,${C.surface2},${C.surface3})`, border:`1px solid ${C.border}`, borderRadius:24, padding:'32px 24px', marginBottom:20, textAlign:'center', position:'relative', overflow:'hidden' }}>
@@ -120,9 +130,14 @@ function TelaInicial({ onAbrirScanner }) {
       </div>
 
       <button onClick={onAbrirScanner}
-        style={{ width:'100%', padding:18, border:'none', borderRadius:16, background:`linear-gradient(135deg,${C.accent},#0099CC)`, color:'#020C18', fontFamily:'inherit', fontSize:16, fontWeight:700, cursor:'pointer', marginBottom:16, boxShadow:`0 8px 32px ${C.accentGlow}`, display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
+        style={{ width:'100%', padding:18, border:'none', borderRadius:16, background:`linear-gradient(135deg,${C.accent},#0099CC)`, color:'#020C18', fontFamily:'inherit', fontSize:16, fontWeight:700, cursor:'pointer', marginBottom:12, boxShadow:`0 8px 32px ${C.accentGlow}`, display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
         <IconeBarras cor="#020C18" tamanho={20} />
         Abrir Scanner
+      </button>
+
+      <button onClick={onCorrecaoSemAlimento}
+        style={{ width:'100%', padding:14, border:`1px solid ${C.border}`, borderRadius:14, background:'none', color:C.text2, fontFamily:'inherit', fontSize:13, fontWeight:600, cursor:'pointer', marginBottom:16, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+        🩸 Só corrigir glicemia (sem comida)
       </button>
 
       <Card>

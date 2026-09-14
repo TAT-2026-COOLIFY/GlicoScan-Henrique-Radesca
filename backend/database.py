@@ -184,7 +184,8 @@ def obter_estatisticas(perfil=None):
     media_carbo = conn.execute(f'SELECT AVG(carbo_total) as m FROM historico {where}', params).fetchone()['m']
     media_dose = conn.execute(f'SELECT AVG(dose) as m FROM historico {where}', params).fetchone()['m']
     por_dia = conn.execute(f'''
-        SELECT data, SUM(carbo_total) as carbo, SUM(dose) as dose, COUNT(*) as ref
+        SELECT data, SUM(carbo_total) as carbo, SUM(dose) as dose, COUNT(*) as ref,
+               AVG(CASE WHEN glicemia_atual > 0 THEN glicemia_atual END) as glicemia
         FROM historico {where} GROUP BY data ORDER BY id DESC LIMIT 7
     ''', params).fetchall()
     mais_consumidos = conn.execute(f'''
@@ -192,10 +193,16 @@ def obter_estatisticas(perfil=None):
     ''', params).fetchall()
     conn.close()
 
+    por_dia_processado = []
+    for r in por_dia:
+        d = dict(r)
+        d['glicemia'] = round(d['glicemia'], 1) if d['glicemia'] is not None else None
+        por_dia_processado.append(d)
+
     return {
         'total_calculos': total,
         'media_carbo_por_refeicao': round(media_carbo or 0, 1),
         'media_dose_por_refeicao': round(media_dose or 0, 1),
-        'por_dia': [dict(r) for r in por_dia],
+        'por_dia': por_dia_processado,
         'mais_consumidos': [dict(r) for r in mais_consumidos],
     }

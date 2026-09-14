@@ -178,13 +178,21 @@ function MiniChart({ dados }) {
   const invertido = [...dados].reverse()
   const maxCarbo = Math.max(...invertido.map(d => d.carbo || 0), 1)
   const maxDose  = Math.max(...invertido.map(d => d.dose || 0), 1)
+  const diasComGlicemia = invertido.map((d, i) => ({ i, v: d.glicemia })).filter(p => p.v != null)
+  const maxGlicemia = Math.max(...diasComGlicemia.map(p => p.v), 1)
   const LARGURA = 330, ALTURA = 80, PADDING = 24
 
+  const posX = i => PADDING + (i / (invertido.length - 1)) * (LARGURA - PADDING * 2)
+
   const gerarPontos = (chave, max) => invertido.map((d, i) => {
-    const x = PADDING + (i / (invertido.length - 1)) * (LARGURA - PADDING * 2)
     const y = ALTURA - PADDING - ((d[chave] || 0) / max) * (ALTURA - PADDING * 2)
-    return `${x},${y}`
+    return `${posX(i)},${y}`
   }).join(' ')
+
+  // Glicemia não tem valor todo dia — pula os dias sem registro em vez de "cair pra zero"
+  const pontosGlicemia = diasComGlicemia
+    .map(({ i, v }) => `${posX(i)},${ALTURA - PADDING - (v / maxGlicemia) * (ALTURA - PADDING * 2)}`)
+    .join(' ')
 
   return (
     <div style={{ padding:'4px 0 12px' }}>
@@ -194,21 +202,23 @@ function MiniChart({ dados }) {
         ))}
         <polyline points={gerarPontos('carbo', maxCarbo)} fill="none" stroke={C.accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         <polyline points={gerarPontos('dose', maxDose)} fill="none" stroke={C.green} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" strokeDasharray="4,2" />
+        {pontosGlicemia && <polyline points={pontosGlicemia} fill="none" stroke={C.purple} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" strokeDasharray="1,3" />}
         {invertido.map((d, i) => {
-          const x = PADDING + (i / (invertido.length - 1)) * (LARGURA - PADDING * 2)
+          const x = posX(i)
           const yCarbo = ALTURA - PADDING - ((d.carbo || 0) / maxCarbo) * (ALTURA - PADDING * 2)
           const yDose  = ALTURA - PADDING - ((d.dose || 0) / maxDose) * (ALTURA - PADDING * 2)
           return (
             <g key={i}>
               <circle cx={x} cy={yCarbo} r="3" fill={C.accent} />
               <circle cx={x} cy={yDose} r="3" fill={C.green} />
+              {d.glicemia != null && <circle cx={x} cy={ALTURA - PADDING - (d.glicemia / maxGlicemia) * (ALTURA - PADDING * 2)} r="3" fill={C.purple} />}
               <text x={x} y={ALTURA-4} textAnchor="middle" fontSize="8" fill={C.text3}>{d.data?.split('/').slice(0,2).join('/')}</text>
             </g>
           )
         })}
       </svg>
-      <div style={{ display:'flex', gap:16, paddingLeft:4, marginTop:4 }}>
-        {[[C.accent, 'Carbo (g)'], [C.green, 'Dose (UI)']].map(([cor, label]) => (
+      <div style={{ display:'flex', gap:16, paddingLeft:4, marginTop:4, flexWrap:'wrap' }}>
+        {[[C.accent, 'Carbo (g)'], [C.green, 'Dose (UI)'], ...(pontosGlicemia ? [[C.purple, 'Glicemia (mg/dL)']] : [])].map(([cor, label]) => (
           <div key={label} style={{ display:'flex', alignItems:'center', gap:5, fontSize:10, color:C.text3 }}>
             <div style={{ width:18, height:2, background:cor, borderRadius:2 }} />
             {label}
