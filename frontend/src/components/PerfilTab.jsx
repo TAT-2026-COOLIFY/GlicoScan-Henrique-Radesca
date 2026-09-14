@@ -26,6 +26,7 @@ import { C } from '../theme'
 import { INSULIN_TIPS } from '../constants'
 import { storage } from '../utils/storage'
 import { medico } from '../utils/medico'
+import { lembretes } from '../utils/lembretes'
 import { baixarArquivo } from '../utils/exportar'
 import { apiFetch } from '../api'
 import { Card } from './Layout'
@@ -78,6 +79,10 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
   const [novoNome, setNovoNome]       = useState('')
   const [modoSimples, setModoSimples] = useState(false)
   const inputBackupRef = useRef(null)
+
+  // Lembretes de medição — locais, valem pro aparelho inteiro (não por perfil)
+  const [horariosLembrete, setHorariosLembrete] = useState(() => lembretes.listar())
+  const [novoHorario, setNovoHorario]           = useState('08:00')
 
   // Troca de perfil protegida por PIN — se o alvo tem PIN, fica pendente
   // aqui até confirmar, em vez de trocar na hora.
@@ -240,6 +245,22 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
     setDesbloqueado(false)
   }
 
+  const adicionarLembrete = async () => {
+    const permitido = await lembretes.pedirPermissao()
+    if (!permitido) {
+      showToast('⚠️ Permita notificações nas configurações do navegador', 'err')
+      return
+    }
+    lembretes.adicionar(novoHorario)
+    setHorariosLembrete(lembretes.listar())
+    showToast('🔔 Lembrete adicionado')
+  }
+
+  const removerLembrete = (horario) => {
+    lembretes.remover(horario)
+    setHorariosLembrete(lembretes.listar())
+  }
+
   const dica = INSULIN_TIPS[insulin] || INSULIN_TIPS['Humalog (lispro)']
   const valores = { ric, insulin, alvo, fs }
   const setters = { ric: setRic, insulin: setInsulin, alvo: setAlvo, fs: setFs }
@@ -355,6 +376,9 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
         {saved ? '✓ Salvo com sucesso!' : '✓ Salvar Perfil'}
       </button>
 
+      <LembretesDeMedicao horarios={horariosLembrete} novoHorario={novoHorario} onMudarNovoHorario={setNovoHorario}
+        onAdicionar={adicionarLembrete} onRemover={removerLembrete} />
+
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:10 }}>
         <button onClick={exportarBackup}
           style={{ padding:12, background:'none', border:`1px solid ${C.border}`, borderRadius:14, color:C.text3, fontFamily:'inherit', fontSize:12, cursor:'pointer' }}>
@@ -368,6 +392,36 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
           onChange={e => importarBackup(e.target.files?.[0])} />
       </div>
     </div>
+  )
+}
+
+// ── Lembretes de medição — notificação local, vale pro aparelho inteiro ──
+function LembretesDeMedicao({ horarios, novoHorario, onMudarNovoHorario, onAdicionar, onRemover }) {
+  return (
+    <Card style={{ padding:16, marginTop:14 }}>
+      <div style={{ fontSize:10, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:C.text3, marginBottom:10 }}>🔔 Lembretes de medição</div>
+
+      {horarios.length > 0 && (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:12 }}>
+          {horarios.map(h => (
+            <div key={h} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 6px 6px 12px', borderRadius:100, background:C.accentDim, border:`1px solid rgba(0,212,255,.2)`, color:C.accent, fontSize:13, fontWeight:600 }}>
+              {h}
+              <button onClick={() => onRemover(h)} style={{ background:'none', border:'none', color:'inherit', opacity:.6, cursor:'pointer', fontSize:12, padding:'2px 4px' }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:8 }}>
+        <input type="time" value={novoHorario} onChange={e => onMudarNovoHorario(e.target.value)}
+          style={{ flex:1, padding:'10px 14px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:12, color:C.text, fontSize:14, outline:'none', fontFamily:'inherit' }} />
+        <button onClick={onAdicionar}
+          style={{ padding:'10px 18px', border:'none', borderRadius:12, background:C.accent, color:'#020C18', fontFamily:'inherit', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+          + Adicionar
+        </button>
+      </div>
+      <div style={{ fontSize:11, color:C.text3, marginTop:8, lineHeight:1.5 }}>Funciona só com o app aberto (aba ou instalado) — pede permissão de notificação na primeira vez.</div>
+    </Card>
   )
 }
 

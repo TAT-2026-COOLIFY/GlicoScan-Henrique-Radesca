@@ -5,17 +5,30 @@
 // Perfil, Histórico) e exibir notificações (toast). A lógica de cada
 // aba fica isolada no próprio componente dela — ver components/.
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { C } from './theme'
 import { Header, BottomNav } from './components/Layout'
 import ScanTab from './components/ScanTab'
 import PerfilTab from './components/PerfilTab'
 import HistTab from './components/HistTab'
+import { lembretes } from './utils/lembretes'
+
+// Atalho do PWA (manifest.json → shortcuts) abre direto em "Corrigir
+// glicemia sem comida" via ?acao=corrigir, sem passar pela tela inicial.
+const ACAO_INICIAL = new URLSearchParams(window.location.search).get('acao')
 
 export default function App() {
   const [tab, setTab]     = useState('scan')
   const [toast, setToast] = useState(null)
   const toastTimerRef = useRef()
+
+  // Checa lembretes de medição a cada minuto (só funciona com o app
+  // aberto — sem servidor de push, ver utils/lembretes.js).
+  useEffect(() => {
+    lembretes.verificarEDisparar()
+    const id = setInterval(() => lembretes.verificarEDisparar(), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Header lê o perfil ativo direto do storage a cada render — mas trocar de
   // perfil dentro da aba Config é estado local dela, então o Header só some
@@ -35,7 +48,7 @@ export default function App() {
       <Header tab={tab} perfilVersao={perfilVersao} />
 
       <div style={{ flex:1, overflowY:'auto', overflowX:'hidden', position:'relative' }}>
-        {tab === 'scan'   && <ScanTab   showToast={showToast} />}
+        {tab === 'scan'   && <ScanTab   showToast={showToast} acaoInicial={ACAO_INICIAL} />}
         {tab === 'perfil' && <PerfilTab showToast={showToast} onPerfilMudou={avisarPerfilMudou} />}
         {tab === 'hist'   && <HistTab   showToast={showToast} />}
       </div>

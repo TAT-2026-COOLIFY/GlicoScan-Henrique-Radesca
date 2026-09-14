@@ -7,14 +7,14 @@
 //   3) Se achar → mostra <Calculadora> com os dados
 //   4) Se não achar → oferece busca manual por nome do produto
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { C } from '../theme'
 import { Card } from './Layout'
 import { apiFetch } from '../api'
 import Calculadora from './Calculadora'
 import BarcodeScanner from '../BarcodeScanner'
 
-export default function ScanTab({ showToast }) {
+export default function ScanTab({ showToast, acaoInicial }) {
   const [scanning, setScanning]   = useState(false)
   const [loading, setLoading]     = useState(false)
   const [nutrition, setNutrition] = useState(null)
@@ -23,6 +23,13 @@ export default function ScanTab({ showToast }) {
   const [busca, setBusca]         = useState('')
   const [sugestoes, setSugestoes] = useState([])
   const [somenteCorrecao, setSomenteCorrecao] = useState(false)
+
+  // Atalho do PWA (tela inicial → segurar ícone → "Corrigir glicemia")
+  // pula direto pra essa tela, sem passar pelo scanner.
+  useEffect(() => {
+    if (acaoInicial === 'corrigir') iniciarCorrecaoSemAlimento()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleBarcode = async (code) => {
     if (loading) return

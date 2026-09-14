@@ -10,6 +10,7 @@ import { C } from '../theme'
 import { apiFetch } from '../api'
 import { storage } from '../utils/storage'
 import { gerarCSV, baixarArquivo } from '../utils/exportar'
+import { gerarRelatorioPdf } from '../utils/exportarPdf'
 import { detectarPadroes } from '../utils/padroes'
 
 export default function HistTab({ showToast }) {
@@ -54,6 +55,12 @@ export default function HistTab({ showToast }) {
     showToast('📄 CSV baixado')
   }
 
+  const exportarPDF = () => {
+    const nomePerfil = storage.getPerfilAtivo().nome
+    gerarRelatorioPdf({ nomePerfil, historico: list, stats })
+    showToast('📄 PDF baixado')
+  }
+
   const padroes = detectarPadroes(list)
 
   if (loading) {
@@ -90,11 +97,15 @@ export default function HistTab({ showToast }) {
               style={{ padding:13, background:'none', border:`1px solid ${C.border}`, borderRadius:14, color:C.text2, fontFamily:'inherit', fontSize:13, cursor:'pointer' }}>
               📄 Exportar CSV
             </button>
-            <button onClick={limparTudo}
-              style={{ padding:13, background:'none', border:`1px solid rgba(255,77,109,.2)`, borderRadius:14, color:C.danger, fontFamily:'inherit', fontSize:13, cursor:'pointer', opacity:.7 }}>
-              🗑️ Limpar tudo
+            <button onClick={exportarPDF}
+              style={{ padding:13, background:'none', border:`1px solid ${C.border}`, borderRadius:14, color:C.text2, fontFamily:'inherit', fontSize:13, cursor:'pointer' }}>
+              📋 Relatório PDF
             </button>
           </div>
+          <button onClick={limparTudo}
+            style={{ width:'100%', padding:13, background:'none', border:`1px solid rgba(255,77,109,.2)`, borderRadius:14, color:C.danger, fontFamily:'inherit', fontSize:13, cursor:'pointer', opacity:.7, marginTop:10 }}>
+            🗑️ Limpar tudo
+          </button>
         </>
       )}
     </div>
@@ -160,6 +171,7 @@ function ItemHistorico({ h, index, onRemover }) {
         <div style={{ fontSize:14, fontWeight:700, marginBottom:3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'capitalize' }}>{h.produto}</div>
         {h.unidade && <div style={{ fontSize:12, color:C.accent, marginBottom:2 }}>🍽️ {h.unidade}</div>}
         <div style={{ fontSize:11, color:C.text3 }}>{h.carbo_total}g carbo · RIC 1:{h.ric}</div>
+        {h.observacao && <div style={{ fontSize:11, color:C.text3, marginTop:3, fontStyle:'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📝 {h.observacao}</div>}
       </div>
       <div style={{ textAlign:'right', flexShrink:0 }}>
         <div style={{ fontSize:24, fontWeight:800, color:C.accent, lineHeight:1 }}>{h.dose} UI</div>

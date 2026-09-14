@@ -32,7 +32,7 @@ def init_db():
             proteinas REAL, gorduras REAL, calorias REAL,
             carbo_total REAL, porcoes REAL, ric INTEGER,
             dose REAL, insulina TEXT, glicemia_atual REAL,
-            data TEXT, hora TEXT, perfil TEXT
+            data TEXT, hora TEXT, perfil TEXT, observacao TEXT
         );
         CREATE TABLE IF NOT EXISTS cache_busca (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,6 +45,10 @@ def init_db():
     # "regulagens" no mesmo app) — coluna nova não some das linhas antigas.
     try:
         conn.execute('ALTER TABLE historico ADD COLUMN perfil TEXT')
+    except sqlite3.OperationalError:
+        pass  # coluna já existe
+    try:
+        conn.execute('ALTER TABLE historico ADD COLUMN observacao TEXT')
     except sqlite3.OperationalError:
         pass  # coluna já existe
     conn.commit()
@@ -138,19 +142,22 @@ def listar_historico(perfil=None, limite=100):
 def adicionar_historico(d):
     conn = get_connection()
     agora = datetime.now()
-    conn.execute('''INSERT INTO historico
+    cursor = conn.execute('''INSERT INTO historico
         (produto,porcao,unidade,carboidratos,acucares,fibras,proteinas,gorduras,
-         calorias,carbo_total,porcoes,ric,dose,insulina,glicemia_atual,data,hora,perfil)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+         calorias,carbo_total,porcoes,ric,dose,insulina,glicemia_atual,data,hora,perfil,observacao)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
         d.get('produto', ''), d.get('porcao', ''), d.get('unidade', ''),
         d.get('carboidratos', 0), d.get('acucares', 0), d.get('fibras', 0),
         d.get('proteinas', 0), d.get('gorduras', 0), d.get('calorias', 0),
         d.get('carboTotal', 0), d.get('porcoes', 1), d.get('ric', 15),
         d.get('dose', 0), d.get('insulina', ''), d.get('glicemiaAtual', 0),
         agora.strftime('%d/%m/%Y'), agora.strftime('%H:%M'), d.get('perfil') or PERFIL_PADRAO,
+        d.get('observacao') or '',
     ))
+    novo_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    return novo_id
 
 
 def remover_historico(id):

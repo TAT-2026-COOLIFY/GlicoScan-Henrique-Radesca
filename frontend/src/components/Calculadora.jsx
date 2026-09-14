@@ -40,6 +40,9 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
   // Correção sem alimento pula direto pro resultado — não tem nutrição pra confirmar
   const [confirmado, setConfirmado] = useState(somenteCorrecao)
   const [salvou, setSalvou]         = useState(false)
+  const [savedId, setSavedId]       = useState(null)
+  const [desfeito, setDesfeito]     = useState(false)
+  const [observacao, setObservacao] = useState('')
   const [iobAtivo, setIobAtivo]     = useState(0)
 
   const camposSuspeitos = CAMPOS_NUTRICIONAIS
@@ -117,16 +120,31 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
     if (!resultado || salvou) return
     setSalvou(true)
     try {
-      await apiFetch('/historico', {
+      const r = await apiFetch('/historico', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(resultado),
+        body: JSON.stringify({ ...resultado, observacao }),
       })
+      const data = await r.json().catch(() => ({}))
+      setSavedId(data.id ?? null)
       showToast('✅ Salvo no histórico!')
-      setTimeout(() => onReset(), 1500)
+      setTimeout(() => { if (!desfeito) onReset() }, 8000)
     } catch {
       showToast('❌ Erro ao salvar', 'err')
       setSalvou(false)
+    }
+  }
+
+  const desfazerUltimo = async () => {
+    if (!savedId || desfeito) return
+    setDesfeito(true)
+    try {
+      await apiFetch(`/historico/${savedId}`, { method: 'DELETE' })
+      showToast('↩️ Removido do histórico')
+    } catch {
+      showToast('❌ Erro ao desfazer', 'err')
+    } finally {
+      onReset()
     }
   }
 
@@ -153,6 +171,8 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
       glicemia={glicemia} setGlicemia={setGlicemia}
       resultado={resultado} dicaInsulina={dicaInsulina}
       salvou={salvou} onSalvar={salvarNoHistorico}
+      savedId={savedId} desfeito={desfeito} onDesfazer={desfazerUltimo}
+      observacao={observacao} setObservacao={setObservacao}
       onEditar={() => { setConfirmado(false); setResultado(null) }}
       onReset={onReset}
       onBlurGlicemia={() => calcular(portions)}
@@ -244,7 +264,7 @@ function TelaConfirmacao({ editNut, setEditNut, nomeProd, setNomeProd, camposSus
 }
 
 // ── Subcomponente: tela de resultado (dose calculada) ─────────────
-function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, resultado, dicaInsulina, salvou, onSalvar, onEditar, onReset, onBlurGlicemia, somenteCorrecao }) {
+function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, resultado, dicaInsulina, salvou, onSalvar, savedId, desfeito, onDesfazer, observacao, setObservacao, onEditar, onReset, onBlurGlicemia, somenteCorrecao }) {
   return (
     <div style={{ padding:'16px 16px 28px' }}>
       <Card style={{ marginBottom:14 }}>
@@ -274,11 +294,21 @@ function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, 
         </div>
       </Card>
 
+      <Card style={{ marginBottom:14 }}>
+        <div style={{ padding:'12px 16px' }}>
+          <div style={{ fontSize:12, color:C.text2, marginBottom:8 }}>📝 Observação <span style={{ fontSize:11, color:C.text3 }}>(opcional)</span></div>
+          <textarea value={observacao} onChange={e => setObservacao(e.target.value)} disabled={salvou}
+            placeholder="Ex: fiz exercício antes, estava doente..."
+            style={{ width:'100%', minHeight:52, padding:'10px 12px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:12, color:C.text, fontSize:13, outline:'none', fontFamily:'inherit', resize:'vertical', boxSizing:'border-box', opacity:salvou?.6:1 }} />
+        </div>
+      </Card>
+
       <AvisoMedico />
 
       {resultado && (
         <ResultadoDose resultado={resultado} dicaInsulina={dicaInsulina} salvou={salvou}
-          onSalvar={onSalvar} onEditar={onEditar} onReset={onReset} />
+          onSalvar={onSalvar} savedId={savedId} desfeito={desfeito} onDesfazer={onDesfazer}
+          onEditar={onEditar} onReset={onReset} />
       )}
     </div>
   )
@@ -308,9 +338,12 @@ function AvisoMedico() {
   )
 }
 
-function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, onEditar, onReset }) {
+function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, savedId, desfeito, onDesfazer, onEditar, onReset }) {
+  const podeDesfazer = salvou && savedId && !desfeito
   const botoes = [
-    [salvou ? '✅ Salvo!' : '💾 Salvar', C.green, 'rgba(0,229,160,.1)', 'rgba(0,229,160,.25)', onSalvar],
+    podeDesfazer
+      ? ['↩️ Desfazer', C.danger, 'rgba(255,77,109,.1)', 'rgba(255,77,109,.25)', onDesfazer]
+      : [salvou ? '✅ Salvo!' : '💾 Salvar', C.green, 'rgba(0,229,160,.1)', 'rgba(0,229,160,.25)', onSalvar],
     ...(resultado.somenteCorrecao ? [] : [['✏️ Editar', C.accent, C.accentDim, 'rgba(0,212,255,.25)', onEditar]]),
     ['🔄 Novo', C.text3, 'transparent', C.border, onReset],
   ]

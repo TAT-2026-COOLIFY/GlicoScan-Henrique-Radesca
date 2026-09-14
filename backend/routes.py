@@ -256,8 +256,8 @@ def post_historico():
     erro = _validar_historico(dados)
     if erro:
         return jsonify({'erro': erro}), 400
-    db.adicionar_historico(dados)
-    return jsonify({'ok': True})
+    novo_id = db.adicionar_historico(dados)
+    return jsonify({'ok': True, 'id': novo_id})
 
 
 @bp.route('/historico/<int:id>', methods=['DELETE'])

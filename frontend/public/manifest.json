@@ -20,5 +20,14 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Corrigir glicemia",
+      "short_name": "Corrigir",
+      "description": "Corrigir glicemia sem registrar comida",
+      "url": "/?acao=corrigir",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }
