@@ -60,9 +60,11 @@ a serem commitados.
      login por conta. Sem eles a API fica aberta e todo mundo vê o
      histórico de todo mundo. No painel do Supabase: Settings → API Keys
      (URL do projeto + chave "publishable", que é pública por design).
-     Em Authentication → Sign In / Providers, desligue "Confirm email" se
-     quiser cadastro sem confirmar e-mail (o envio embutido tem limite
-     baixo por hora).
+     O app só tem tela de **login**, sem cadastro: em Authentication →
+     Sign In / Providers, deixe "Allow new users to sign up" **desligado**
+     (senão qualquer um cria conta chamando a API direto com a chave
+     pública) e crie cada conta em Authentication → Users → Add user
+     (marque "Auto Confirm User").
    - `DOCTOR_PASSWORD` — opcional. Se preencher, RIC/tipo de insulina/
      glicemia alvo/fator de sensibilidade ficam só leitura no app até
      alguém digitar essa senha (desbloqueia por 15min). Deixe em branco

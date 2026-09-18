@@ -166,7 +166,8 @@ uma pessoa:
    abre normal, do cache.
 
 7. **Login por conta (Supabase Auth)** — cada pessoa tem e-mail e senha
-   próprios e só enxerga o próprio histórico. O frontend faz o login
+   próprios (criados pelo administrador no painel do Supabase; o app não
+   tem cadastro público) e só enxerga o próprio histórico. O frontend faz o login
    (`frontend/src/supabase.js`, `LoginTela.jsx`) e manda o token em
    `Authorization: Bearer` (`api.js`); o backend valida o token no
    Supabase e usa o id da conta como dono dos dados (`routes.py`,
