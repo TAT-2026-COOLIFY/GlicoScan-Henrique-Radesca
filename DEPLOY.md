@@ -56,11 +56,13 @@ a serem commitados.
    - `OCR_API_KEY`
    - `FS_CLIENT_ID`
    - `FS_CLIENT_SECRET`
-   - `APP_TOKEN` — **importante em produção**: invente um valor aleatório
-     aqui (ex: uma senha longa qualquer). Sem isso, qualquer pessoa com a
-     URL pública do Render lê seu histórico de dose/glicemia e pode
-     apagar tudo, sem login nenhum. Anota esse valor — você vai colar o
-     mesmo no Vercel no próximo passo.
+   - `SUPABASE_URL` e `SUPABASE_KEY` — **obrigatórios em produção**: é o
+     login por conta. Sem eles a API fica aberta e todo mundo vê o
+     histórico de todo mundo. No painel do Supabase: Settings → API Keys
+     (URL do projeto + chave "publishable", que é pública por design).
+     Em Authentication → Sign In / Providers, desligue "Confirm email" se
+     quiser cadastro sem confirmar e-mail (o envio embutido tem limite
+     baixo por hora).
    - `DOCTOR_PASSWORD` — opcional. Se preencher, RIC/tipo de insulina/
      glicemia alvo/fator de sensibilidade ficam só leitura no app até
      alguém digitar essa senha (desbloqueia por 15min). Deixe em branco
@@ -93,9 +95,9 @@ antes de começar, só pra garantir que o backend já está "acordado".
 4. Em **Environment Variables**, adiciona:
    - `VITE_API_URL` = a URL do Render que você guardou no passo anterior
      (ex: `https://glicoscan-api.onrender.com`)
-   - `VITE_APP_TOKEN` = o **mesmo** valor de `APP_TOKEN` que você definiu
-     no Render — se os dois não baterem exatamente, o app carrega mas
-     toda chamada à API volta 401 "Não autorizado"
+   - `VITE_SUPABASE_URL` e `VITE_SUPABASE_KEY` = os **mesmos** valores de
+     `SUPABASE_URL` / `SUPABASE_KEY` do Render. Se faltarem, o app não
+     consegue nem mostrar a tela de login.
 5. Clica em **Deploy**
 
 Depois de alguns minutos, você recebe um link público fixo, tipo

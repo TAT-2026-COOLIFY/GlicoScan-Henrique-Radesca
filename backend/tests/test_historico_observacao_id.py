@@ -15,7 +15,7 @@ import routes
 def cliente(tmp_path, monkeypatch):
     monkeypatch.setattr(db, 'DB_PATH', str(tmp_path / 'teste.db'))
     db.init_db()
-    monkeypatch.setattr(routes, 'APP_TOKEN', '')
+    monkeypatch.setattr(routes, 'SUPABASE_URL', '')
     app = Flask(__name__)
     app.register_blueprint(routes.bp)
     return app.test_client()

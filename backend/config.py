@@ -20,11 +20,12 @@ FS_CLIENT_ID     = os.environ.get('FS_CLIENT_ID', '')
 FS_CLIENT_SECRET = os.environ.get('FS_CLIENT_SECRET', '')
 CALORIE_API_KEY  = os.environ.get('CALORIE_API_KEY', '')  # opcional
 
-# Token simples pra travar a API — sem ele, qualquer um com a URL do
-# Render lê /historico (dose de insulina, glicemia) e pode apagar tudo
-# via DELETE. Opcional em dev local; MUITO recomendado assim que o
-# backend for exposto publicamente (ver DEPLOY.md). Vazio = sem trava.
-APP_TOKEN = os.environ.get('APP_TOKEN', '')
+# Login por conta (Supabase Auth). Sem SUPABASE_URL a API roda aberta,
+# com todos os dados num único usuário "local" — só serve pra dev local.
+# Em produção SEMPRE configurar: é o que separa o histórico de cada pessoa.
+# SUPABASE_KEY é a chave "publishable" (pública por design).
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
 
 # Senha mestra do médico — desbloqueia edição de RIC/insulina/glicemia
 # alvo/fator de sensibilidade (só leitura sem ela). Não é por perfil:

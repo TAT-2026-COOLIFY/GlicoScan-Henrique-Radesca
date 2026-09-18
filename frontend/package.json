@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
     "react": "^18.3.1",

@@ -9,27 +9,36 @@ cada rota e formata a resposta JSON.
 from concurrent.futures import ThreadPoolExecutor
 import re
 import requests
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 
 import database as db
 import parsing
-from config import OCR_API_KEY, CALORIE_API_KEY, APP_TOKEN, DOCTOR_PASSWORD
+from config import OCR_API_KEY, CALORIE_API_KEY, SUPABASE_URL, DOCTOR_PASSWORD
 from extensions import limiter
-from services import ocr, openfoodfacts, usda, fatsecret
+from services import ocr, openfoodfacts, usda, fatsecret, supabase_auth
 
 bp = Blueprint('rotas', __name__)
 
 
 @bp.before_request
-def _checar_app_token():
+def _exigir_login():
     """
-    Trava simples por token compartilhado (header X-App-Token). Sem
-    APP_TOKEN configurado no .env, fica desativada (uso local). /health
-    fica sempre aberta pro monitor de uptime do Render não precisar do token.
+    Toda rota (menos /health, que o monitor de uptime do Render usa) exige
+    o token de login do Supabase no header Authorization. O dono dos dados
+    vem SEMPRE do token (g.user_id) — nunca de parâmetro mandado pelo
+    cliente. Sem SUPABASE_URL configurado (dev local), roda aberto com um
+    único usuário "local".
     """
-    if not APP_TOKEN or request.method == 'OPTIONS' or request.path == '/health':
+    if request.method == 'OPTIONS' or request.path == '/health':
         return None
-    if request.headers.get('X-App-Token') != APP_TOKEN:
+    if not SUPABASE_URL:
+        g.user_id = 'local'
+        return None
+
+    cabecalho = request.headers.get('Authorization', '')
+    token = cabecalho[7:] if cabecalho.startswith('Bearer ') else ''
+    g.user_id = supabase_auth.usuario_do_token(token) if token else None
+    if not g.user_id:
         return jsonify({'erro': 'Não autorizado'}), 401
 
 
@@ -247,7 +256,7 @@ def _validar_historico(d):
 
 @bp.route('/historico', methods=['GET'])
 def get_historico():
-    return jsonify(db.listar_historico(perfil=request.args.get('perfil')))
+    return jsonify(db.listar_historico(g.user_id))
 
 
 @bp.route('/historico', methods=['POST'])
@@ -256,25 +265,25 @@ def post_historico():
     erro = _validar_historico(dados)
     if erro:
         return jsonify({'erro': erro}), 400
-    novo_id = db.adicionar_historico(dados)
+    novo_id = db.adicionar_historico(dados, g.user_id)
     return jsonify({'ok': True, 'id': novo_id})
 
 
 @bp.route('/historico/<int:id>', methods=['DELETE'])
 def delete_historico_item(id):
-    db.remover_historico(id)
+    db.remover_historico(id, g.user_id)
     return jsonify({'ok': True})
 
 
 @bp.route('/historico', methods=['DELETE'])
 def delete_historico_tudo():
-    db.limpar_historico(perfil=request.args.get('perfil'))
+    db.limpar_historico(g.user_id)
     return jsonify({'ok': True})
 
 
 @bp.route('/stats')
 def stats():
-    return jsonify(db.obter_estatisticas(perfil=request.args.get('perfil')))
+    return jsonify(db.obter_estatisticas(g.user_id))
 
 
 # ── Trava médica (RIC/insulina/glicemia alvo/FS só editável com senha) ──

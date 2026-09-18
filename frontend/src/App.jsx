@@ -11,13 +11,34 @@ import { Header, BottomNav } from './components/Layout'
 import ScanTab from './components/ScanTab'
 import PerfilTab from './components/PerfilTab'
 import HistTab from './components/HistTab'
+import LoginTela from './components/LoginTela'
 import { lembretes } from './utils/lembretes'
+import { storage } from './utils/storage'
+import { supabase } from './supabase'
 
 // Atalho do PWA (manifest.json → shortcuts) abre direto em "Corrigir
 // glicemia sem comida" via ?acao=corrigir, sem passar pela tela inicial.
 const ACAO_INICIAL = new URLSearchParams(window.location.search).get('acao')
 
+// Portão de login: sem conta ativa, só a tela de login. `key` recria o app
+// inteiro ao trocar de conta — nada do estado do usuário anterior sobra.
 export default function App() {
+  const [sessao, setSessao] = useState(undefined) // undefined = ainda carregando
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSessao(data.session))
+    const { data } = supabase.auth.onAuthStateChange((_evento, nova) => setSessao(nova))
+    return () => data.subscription.unsubscribe()
+  }, [])
+
+  if (sessao === undefined) return null
+  if (!sessao) return <LoginTela />
+
+  storage.definirUsuario(sessao.user.id)
+  return <AppLogado key={sessao.user.id} />
+}
+
+function AppLogado() {
   const [tab, setTab]     = useState('scan')
   const [toast, setToast] = useState(null)
   const toastTimerRef = useRef()

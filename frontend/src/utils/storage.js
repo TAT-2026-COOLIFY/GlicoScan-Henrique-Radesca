@@ -16,12 +16,17 @@
 
 import { DEFAULT_PROFILE } from '../constants'
 
-const STORAGE_KEY = 'gs_perfis'
+const STORAGE_BASE = 'gs_perfis'
 const CHAVE_ANTIGA = 'gs_p' // formato de perfil único (versão anterior) — migrado uma vez
+
+// Perfis (RIC, insulina...) ficam separados por conta: dois logins no mesmo
+// aparelho não podem herdar a regulagem de dose um do outro.
+let _usuario = ''
+const _chave = () => (_usuario ? `${STORAGE_BASE}:${_usuario}` : STORAGE_BASE)
 
 function _lerBruto() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(_chave())
     if (raw) {
       const dados = JSON.parse(raw)
       if (dados && dados.perfis && Object.keys(dados.perfis).length > 0) return dados
@@ -44,7 +49,7 @@ function _lerBruto() {
 
 function _salvarBruto(dados) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(dados))
+    localStorage.setItem(_chave(), JSON.stringify(dados))
   } catch (e) {
     console.error('Erro ao salvar perfis no localStorage:', e)
   }
@@ -57,6 +62,9 @@ async function _hashPin(pin) {
 }
 
 export const storage = {
+  /** Chamado ao entrar numa conta, antes de qualquer leitura de perfil. */
+  definirUsuario: (id) => { _usuario = id || '' },
+
   listarPerfis: () => {
     const { perfis } = _lerBruto()
     return Object.entries(perfis).map(([id, p]) => ({ id, ...p }))

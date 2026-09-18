@@ -35,7 +35,7 @@ frontend/          React + Vite (SPA)
     sw.js               → Service Worker (cache pra uso offline — ver seção "PWA offline")
 
 backend/            Flask + SQLite (API REST)
-  config.py          → chaves de API, configuração, APP_TOKEN opcional
+  config.py          → chaves de API, configuração, login Supabase
   database.py         → acesso ao SQLite (histórico + cache), histórico separado por perfil
   parsing.py           → interpretação do texto extraído por OCR
   services/
@@ -43,7 +43,7 @@ backend/            Flask + SQLite (API REST)
     usda.py             → 2ª fonte (fallback, match exato de código de barras)
     fatsecret.py        → busca complementar por nome
     ocr.py               → extração de texto de fotos (dual engine)
-  routes.py             → endpoints HTTP + trava por APP_TOKEN
+  routes.py             → endpoints HTTP + exige login em toda rota
   server.py             → ponto de entrada (cria o app Flask)
   tests/               → testes automatizados (pytest)
 ```
@@ -165,12 +165,19 @@ uma pessoa:
    derrubando backend e frontend juntos e recarregando a página: o app
    abre normal, do cache.
 
-7. **Autenticação simples por token (`APP_TOKEN`)** — sem isso, qualquer
-   pessoa com a URL pública do Render lia `/historico` (dose de insulina,
-   glicemia) e podia apagar tudo, sem login nenhum. Opcional em dev local
-   (fica desativada se a variável não existir); **recomendado em produção**
-   — ver `DEPLOY.md`. Frontend manda o token no header `X-App-Token`
-   (`frontend/src/api.js`); backend confere em `routes.py`.
+7. **Login por conta (Supabase Auth)** — cada pessoa tem e-mail e senha
+   próprios e só enxerga o próprio histórico. O frontend faz o login
+   (`frontend/src/supabase.js`, `LoginTela.jsx`) e manda o token em
+   `Authorization: Bearer` (`api.js`); o backend valida o token no
+   Supabase e usa o id da conta como dono dos dados (`routes.py`,
+   `services/supabase_auth.py`) — o dono **nunca** vem de parâmetro do
+   cliente, então trocar `?perfil=` na URL não dá acesso ao dado de
+   outro. `DELETE /historico/<id>` também confere o dono. Sem
+   `SUPABASE_URL` (dev local) a API roda aberta com um único usuário
+   "local"; **obrigatório em produção** — ver `DEPLOY.md`. Limitação
+   conhecida: RIC/insulina/alvo/FS ainda ficam no navegador (por conta,
+   mas não sincronizam entre aparelhos) e o SQLite do Render free reseta a
+   cada deploy — o próximo passo é migrar isso pro Postgres do Supabase.
 
 8. **PIN por perfil + trava médica (`DOCTOR_PASSWORD`)** — cada perfil pode
    ter um PIN de 4 dígitos opcional (hash SHA-256, `utils/storage.js`) pra
