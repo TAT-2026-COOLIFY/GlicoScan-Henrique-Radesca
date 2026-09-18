@@ -9,16 +9,14 @@
 // com a URL completa do backend, ex: https://glicoscan-api.onrender.com
 // Ver DEPLOY.md para o passo a passo.
 
+import { supabase } from './supabase'
+
 export const API_BASE = import.meta.env.VITE_API_URL || ''
 
-// Se o backend exigir APP_TOKEN (ver backend/config.py — recomendado em
-// deploy público, já que /historico expõe dado de saúde), o frontend
-// precisa mandar o mesmo valor em VITE_APP_TOKEN pra não tomar 401.
-const APP_TOKEN = import.meta.env.VITE_APP_TOKEN || ''
-
-/** fetch() já com API_BASE e o header de autenticação (quando configurado). */
-export function apiFetch(caminho, opcoes = {}) {
+/** fetch() já com API_BASE e o token de login da conta atual (o backend usa ele pra saber de quem é cada dado). */
+export async function apiFetch(caminho, opcoes = {}) {
   const headers = { ...(opcoes.headers || {}) }
-  if (APP_TOKEN) headers['X-App-Token'] = APP_TOKEN
+  const { data } = await supabase.auth.getSession()
+  if (data.session) headers.Authorization = `Bearer ${data.session.access_token}`
   return fetch(`${API_BASE}${caminho}`, { ...opcoes, headers })
 }

@@ -200,3 +200,18 @@ describe('storage — dado corrompido no localStorage', () => {
     expect(storage.getPerfilAtivo().nome).toBe('Perfil 1')
   })
 })
+
+describe('storage — perfis separados por conta logada', () => {
+  it('duas contas no mesmo aparelho não compartilham a regulagem', async () => {
+    const storage = await getStorage()
+
+    storage.definirUsuario('ana')
+    storage.salvarPerfil(storage.getPerfilAtivo().id, { ric: 8 })
+
+    storage.definirUsuario('bruno')
+    expect(storage.getPerfilAtivo().ric).not.toBe(8)
+
+    storage.definirUsuario('ana')
+    expect(storage.getPerfilAtivo().ric).toBe(8)
+  })
+})

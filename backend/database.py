@@ -11,9 +11,8 @@ import json
 from datetime import datetime, timedelta
 from config import DB_PATH
 
-# Mesmo nome que o frontend dá ao perfil migrado do formato antigo
-# (perfil único) — assim, linhas de histórico gravadas antes de existir
-# múltiplos perfis continuam aparecendo pra quem era o único usuário.
+# Nome padrão do perfil quando o frontend não manda um (só informativo —
+# quem separa o histórico entre pessoas é user_id, não este nome).
 PERFIL_PADRAO = 'Perfil 1'
 
 
@@ -32,7 +31,7 @@ def init_db():
             proteinas REAL, gorduras REAL, calorias REAL,
             carbo_total REAL, porcoes REAL, ric INTEGER,
             dose REAL, insulina TEXT, glicemia_atual REAL,
-            data TEXT, hora TEXT, perfil TEXT, observacao TEXT
+            data TEXT, hora TEXT, perfil TEXT, observacao TEXT, user_id TEXT
         );
         CREATE TABLE IF NOT EXISTS cache_busca (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +48,12 @@ def init_db():
         pass  # coluna já existe
     try:
         conn.execute('ALTER TABLE historico ADD COLUMN observacao TEXT')
+    except sqlite3.OperationalError:
+        pass  # coluna já existe
+    # Dono da linha (id do usuário no Supabase). Linhas antigas ficam NULL
+    # e não aparecem pra ninguém — eram de antes de existir login.
+    try:
+        conn.execute('ALTER TABLE historico ADD COLUMN user_id TEXT')
     except sqlite3.OperationalError:
         pass  # coluna já existe
     conn.commit()
@@ -123,36 +128,30 @@ def buscar_cache_barcode(code):
 
 # ── Histórico de cálculos ────────────────────────────────────────
 
-def listar_historico(perfil=None, limite=100):
-    """Sem `perfil`, devolve o histórico de todo mundo (uso interno/depuração).
-    Linhas antigas sem perfil gravado (COALESCE) contam como PERFIL_PADRAO."""
+def listar_historico(user_id, limite=100):
     conn = get_connection()
     conn.row_factory = sqlite3.Row
-    if perfil:
-        rows = conn.execute(
-            'SELECT * FROM historico WHERE COALESCE(perfil, ?) = ? ORDER BY id DESC LIMIT ?',
-            (PERFIL_PADRAO, perfil, limite),
-        ).fetchall()
-    else:
-        rows = conn.execute('SELECT * FROM historico ORDER BY id DESC LIMIT ?', (limite,)).fetchall()
+    rows = conn.execute(
+        'SELECT * FROM historico WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limite)
+    ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def adicionar_historico(d):
+def adicionar_historico(d, user_id):
     conn = get_connection()
     agora = datetime.now()
     cursor = conn.execute('''INSERT INTO historico
         (produto,porcao,unidade,carboidratos,acucares,fibras,proteinas,gorduras,
-         calorias,carbo_total,porcoes,ric,dose,insulina,glicemia_atual,data,hora,perfil,observacao)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+         calorias,carbo_total,porcoes,ric,dose,insulina,glicemia_atual,data,hora,perfil,observacao,user_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
         d.get('produto', ''), d.get('porcao', ''), d.get('unidade', ''),
         d.get('carboidratos', 0), d.get('acucares', 0), d.get('fibras', 0),
         d.get('proteinas', 0), d.get('gorduras', 0), d.get('calorias', 0),
         d.get('carboTotal', 0), d.get('porcoes', 1), d.get('ric', 15),
         d.get('dose', 0), d.get('insulina', ''), d.get('glicemiaAtual', 0),
         agora.strftime('%d/%m/%Y'), agora.strftime('%H:%M'), d.get('perfil') or PERFIL_PADRAO,
-        d.get('observacao') or '',
+        d.get('observacao') or '', user_id,
     ))
     novo_id = cursor.lastrowid
     conn.commit()
@@ -160,32 +159,25 @@ def adicionar_historico(d):
     return novo_id
 
 
-def remover_historico(id):
+def remover_historico(id, user_id):
     conn = get_connection()
-    conn.execute('DELETE FROM historico WHERE id=?', (id,))
+    conn.execute('DELETE FROM historico WHERE id=? AND user_id=?', (id, user_id))
     conn.commit()
     conn.close()
 
 
-def limpar_historico(perfil=None):
-    """Sem `perfil`, apaga o histórico de todo mundo — cuidado, uso interno."""
+def limpar_historico(user_id):
     conn = get_connection()
-    if perfil:
-        conn.execute('DELETE FROM historico WHERE COALESCE(perfil, ?) = ?', (PERFIL_PADRAO, perfil))
-    else:
-        conn.execute('DELETE FROM historico')
+    conn.execute('DELETE FROM historico WHERE user_id = ?', (user_id,))
     conn.commit()
     conn.close()
 
 
-def obter_estatisticas(perfil=None):
+def obter_estatisticas(user_id):
     conn = get_connection()
     conn.row_factory = sqlite3.Row
 
-    if perfil:
-        where, params = 'WHERE COALESCE(perfil, ?) = ?', (PERFIL_PADRAO, perfil)
-    else:
-        where, params = '', ()
+    where, params = 'WHERE user_id = ?', (user_id,)
 
     total = conn.execute(f'SELECT COUNT(*) as n FROM historico {where}', params).fetchone()['n']
     media_carbo = conn.execute(f'SELECT AVG(carbo_total) as m FROM historico {where}', params).fetchone()['m']

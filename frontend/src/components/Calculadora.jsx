@@ -54,7 +54,7 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
   useEffect(() => {
     const perfil = storage.getPerfilAtivo()
     const duracao = DURACAO_INSULINA_HORAS[perfil.insulin] || 4
-    apiFetch(`/historico?perfil=${encodeURIComponent(perfil.nome)}`)
+    apiFetch('/historico')
       .then(r => r.json())
       .then(historico => setIobAtivo(calcularIOB(Array.isArray(historico) ? historico : [], duracao)))
       .catch(() => setIobAtivo(0))

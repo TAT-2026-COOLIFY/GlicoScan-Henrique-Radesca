@@ -20,10 +20,9 @@ export default function HistTab({ showToast }) {
 
   const carregar = async () => {
     try {
-      const perfil = encodeURIComponent(storage.getPerfilAtivo().nome)
       const [historico, estatisticas] = await Promise.all([
-        apiFetch(`/historico?perfil=${perfil}`).then(r => r.json()),
-        apiFetch(`/stats?perfil=${perfil}`).then(r => r.json()),
+        apiFetch('/historico').then(r => r.json()),
+        apiFetch('/stats').then(r => r.json()),
       ])
       setList(Array.isArray(historico) ? historico : [])
       setStats(estatisticas)
@@ -37,9 +36,8 @@ export default function HistTab({ showToast }) {
   useEffect(() => { carregar() }, [])
 
   const limparTudo = async () => {
-    const nomePerfil = storage.getPerfilAtivo().nome
-    if (!confirm(`Limpar todo o histórico de "${nomePerfil}"?`)) return
-    await apiFetch(`/historico?perfil=${encodeURIComponent(nomePerfil)}`, { method: 'DELETE' })
+    if (!confirm('Limpar todo o seu histórico?')) return
+    await apiFetch('/historico', { method: 'DELETE' })
     carregar()
     showToast('🗑️ Histórico limpo')
   }

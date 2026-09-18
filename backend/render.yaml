@@ -25,7 +25,9 @@ services:
         sync: false
       - key: CALORIE_API_KEY
         sync: false
-      - key: APP_TOKEN
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
         sync: false
       - key: DOCTOR_PASSWORD
         sync: false

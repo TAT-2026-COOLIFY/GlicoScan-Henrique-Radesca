@@ -7,7 +7,7 @@ import routes
 
 def _cliente(monkeypatch, senha_configurada):
     monkeypatch.setattr(routes, 'DOCTOR_PASSWORD', senha_configurada)
-    monkeypatch.setattr(routes, 'APP_TOKEN', '')  # não é o que este teste cobre
+    monkeypatch.setattr(routes, 'SUPABASE_URL', '')  # sem login: não é o que este teste cobre
     app = Flask(__name__)
     app.register_blueprint(routes.bp)
     return app.test_client()

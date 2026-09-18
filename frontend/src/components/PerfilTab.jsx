@@ -29,6 +29,7 @@ import { medico } from '../utils/medico'
 import { lembretes } from '../utils/lembretes'
 import { baixarArquivo } from '../utils/exportar'
 import { apiFetch } from '../api'
+import { supabase } from '../supabase'
 import { Card } from './Layout'
 
 const CAMPOS = [
@@ -391,6 +392,11 @@ export default function PerfilTab({ showToast, onPerfilMudou }) {
         <input ref={inputBackupRef} type="file" accept="application/json" style={{ display:'none' }}
           onChange={e => importarBackup(e.target.files?.[0])} />
       </div>
+
+      <button onClick={() => supabase.auth.signOut()}
+        style={{ width:'100%', marginTop:10, padding:12, background:'none', border:`1px solid rgba(255,77,109,.2)`, borderRadius:14, color:C.danger, fontFamily:'inherit', fontSize:12, cursor:'pointer', opacity:.8 }}>
+        🚪 Sair da conta
+      </button>
     </div>
   )
 }
