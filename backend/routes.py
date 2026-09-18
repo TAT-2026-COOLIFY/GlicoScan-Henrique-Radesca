@@ -7,6 +7,7 @@ services/*, database.py e parsing.py — aqui só orquestra o fluxo de
 cada rota e formata a resposta JSON.
 """
 from concurrent.futures import ThreadPoolExecutor
+import os
 import re
 import requests
 from flask import Blueprint, request, jsonify, g
@@ -27,11 +28,14 @@ def _exigir_login():
     o token de login do Supabase no header Authorization. O dono dos dados
     vem SEMPRE do token (g.user_id) — nunca de parâmetro mandado pelo
     cliente. Sem SUPABASE_URL configurado (dev local), roda aberto com um
-    único usuário "local".
+    único usuário "local" — mas no Render (que define RENDER=true) isso
+    NUNCA vale: variável esquecida ou com nome errado não pode abrir a API.
     """
     if request.method == 'OPTIONS' or request.path == '/health':
         return None
     if not SUPABASE_URL:
+        if os.environ.get('RENDER'):
+            return jsonify({'erro': 'Login não configurado no servidor'}), 503
         g.user_id = 'local'
         return None
 

@@ -65,6 +65,13 @@ def test_sem_supabase_configurado_roda_aberto_em_dev_local(tmp_path, monkeypatch
     assert cliente.get('/historico').status_code == 200
 
 
+def test_em_producao_sem_supabase_configurado_fecha_a_api(tmp_path, monkeypatch):
+    monkeypatch.setenv('RENDER', 'true')
+    cliente = _cliente(tmp_path, monkeypatch, '')
+    assert cliente.get('/historico').status_code == 503
+    assert cliente.get('/health').status_code == 200
+
+
 # ── Isolamento entre contas ──────────────────────────────────────
 
 def test_usuario_nao_ve_historico_de_outro(cliente):
