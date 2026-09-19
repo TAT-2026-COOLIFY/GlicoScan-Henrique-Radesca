@@ -180,21 +180,25 @@ uma pessoa:
    mas não sincronizam entre aparelhos) e o SQLite do Render free reseta a
    cada deploy — o próximo passo é migrar isso pro Postgres do Supabase.
 
-8. **PIN por perfil + trava médica (`DOCTOR_PASSWORD`)** — cada perfil pode
-   ter um PIN de 4 dígitos opcional (hash SHA-256, `utils/storage.js`) pra
-   não deixar qualquer um no aparelho trocar livremente pra ele. Separado
-   disso, RIC/tipo de insulina/glicemia alvo/FS ficam só leitura até
-   digitar a senha do médico (`POST /medico/verificar`, desbloqueia por
-   15min na aba — `utils/medico.js`). Ambos opcionais; sem configurar
-   nada, o app funciona como antes (perfis livres, config sempre editável).
+8. **Trava médica (`DOCTOR_PASSWORD`)** — RIC/tipo de insulina/glicemia
+   alvo/FS ficam só leitura até digitar a senha do médico
+   (`POST /medico/verificar`, desbloqueia por 15min na aba —
+   `utils/medico.js`). Opcional: sem `DOCTOR_PASSWORD` no servidor, a
+   config fica sempre editável. Não existe mais PIN por perfil — quem
+   separa as pessoas agora é o login por conta (item 7).
+
+9. **Rate limit por cliente atrás do proxy** — `ProxyFix` em `server.py`.
+   O Render aparece com o mesmo IP pra todo mundo; sem isso, os limites
+   (5 tentativas/min na senha do médico, 10 OCR/min...) valeriam pro app
+   inteiro, não por pessoa.
 
 ## Perfis (família no mesmo aparelho)
 
 O app suporta múltiplos perfis — pensado pra família usando o mesmo
 celular/computador, cada pessoa com sua própria "regulagem" (RIC, tipo de
-insulina, glicemia alvo, fator de sensibilidade). Perfil pode opcionalmente
-ter PIN, mas **não é sistema de login de verdade**: sem PIN configurado,
-qualquer um com acesso ao aparelho troca de perfil livremente.
+insulina, glicemia alvo, fator de sensibilidade). Perfil **não** é login:
+quem separa o histórico entre pessoas é a conta (Supabase). Os perfis ficam
+dentro de cada conta, no navegador.
 
 - Perfis ficam no `localStorage` do navegador (`utils/storage.js`), trocáveis
   pela aba Config. Quem já usava o app antes dessa feature é migrado
@@ -227,8 +231,7 @@ qualquer um com acesso ao aparelho troca de perfil livremente.
    Não é diagnóstico, só aponta o padrão pra discutir com o médico.
 
 4. **Backup/restauração de perfis** (botões "Exportar/Importar perfis" na
-   aba Config) — baixa um JSON com todos os perfis (RIC, insulina, PIN como
-   hash) e restaura depois, útil ao trocar de aparelho. Importar substitui
+   aba Config) — baixa um JSON com todos os perfis (RIC, insulina, alvo, FS) e restaura depois, útil ao trocar de aparelho. Importar substitui
    os perfis atuais — pede confirmação antes.
 
 5. **Modo Simples** (toggle por perfil, aba Config) — tela de resultado da
