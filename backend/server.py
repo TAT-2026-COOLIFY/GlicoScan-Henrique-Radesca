@@ -21,6 +21,7 @@ Rodar em produção: gunicorn server:app                 (ver DEPLOY.md)
 import os
 from flask import Flask, jsonify
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import CORS_ORIGINS
 from database import init_db
@@ -28,6 +29,13 @@ from extensions import limiter
 from routes import bp as rotas_bp
 
 app = Flask(__name__)
+
+# Atrás do proxy do Render, request.remote_addr é o IP do proxy — igual pra
+# todo mundo. Sem isto, o rate limit (que conta por IP) é dividido entre TODOS
+# os usuários: 5 tentativas/min na senha do médico, 10 OCR/min etc. valeriam
+# pro app inteiro. x_for=1 lê o IP que o próprio Render acrescentou ao
+# X-Forwarded-For (o último da lista), que o cliente não consegue forjar.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 # '*' (padrão) libera geral — trocar ALLOWED_ORIGINS no .env pra travar
 # no domínio do frontend em produção (ver DEPLOY.md).
