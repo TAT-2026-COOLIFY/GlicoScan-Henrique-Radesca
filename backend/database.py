@@ -9,6 +9,9 @@ Duas tabelas:
 import sqlite3
 import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+import config
 from config import DB_PATH
 
 # Nome padrão do perfil quando o frontend não manda um (só informativo —
@@ -140,7 +143,7 @@ def listar_historico(user_id, limite=100):
 
 def adicionar_historico(d, user_id):
     conn = get_connection()
-    agora = datetime.now()
+    agora = datetime.now(ZoneInfo(config.APP_TZ))
     cursor = conn.execute('''INSERT INTO historico
         (produto,porcao,unidade,carboidratos,acucares,fibras,proteinas,gorduras,
          calorias,carbo_total,porcoes,ric,dose,insulina,glicemia_atual,data,hora,perfil,observacao,user_id)

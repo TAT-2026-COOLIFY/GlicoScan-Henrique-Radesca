@@ -72,6 +72,12 @@ OFF_BARCODE_ENDPOINTS = [
     'https://br.openfoodfacts.org/api/v0/product/{code}.json',
 ]
 
+# Fuso das datas/horas gravadas no histórico. O servidor do Render roda em
+# UTC; sem isso a hora sai 3h adiantada e o cálculo de insulina ativa (IOB)
+# ignora doses recentes, achando que estão "no futuro" — o app deixa de
+# proteger contra empilhar insulina.
+APP_TZ = os.environ.get('APP_TZ', 'America/Sao_Paulo')
+
 # Em produção (Render, Railway etc.) normalmente não há disco persistente
 # garantido — use um volume/persistent disk se quiser manter o SQLite
 # entre deploys. Para desenvolvimento local, fica ao lado deste arquivo.

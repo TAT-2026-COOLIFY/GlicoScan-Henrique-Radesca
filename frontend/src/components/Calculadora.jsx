@@ -19,6 +19,7 @@ import { INSULIN_TIPS, DURACAO_INSULINA_HORAS } from '../constants'
 import { storage } from '../utils/storage'
 import { valorSuspeito, gerarDescricao } from '../utils/nutrition'
 import { calcularIOB } from '../utils/iob'
+import { calcularDose, glicemiaParaMgdl, umDecimal, LIMITE_HIPO_MGDL } from '../utils/dose'
 import { Card } from './Layout'
 import { apiFetch } from '../api'
 
@@ -65,18 +66,8 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
     const { ric = 15, alvo = 100, fs = 50 } = perfil
 
     const carboTotal = +((editNut.carboidratos || 0) * porcoesAtuais).toFixed(1)
-    const doseBase = carboTotal / ric
-
-    const glicemiaNum = parseFloat(String(glicemia).replace(',', '.'))
-    let glicemiaMgdl = 0
-    if (!isNaN(glicemiaNum) && glicemiaNum > 0) {
-      // Se o valor for menor que 30, assume que o usuário digitou em mmol/L e converte
-      glicemiaMgdl = glicemiaNum < 30 ? Math.round(glicemiaNum * 18) : glicemiaNum
-    }
-
-    const correcao = glicemiaMgdl > 0 ? (glicemiaMgdl - alvo) / fs : 0
-    const iob = Math.round(iobAtivo * 2) / 2
-    const doseTotal = Math.max(0, Math.round((doseBase + correcao - iob) * 2) / 2)
+    const glicemiaMgdl = glicemiaParaMgdl(glicemia)
+    const conta = calcularDose({ carboTotal, ric, alvo, fs, glicemiaMgdl, iob: iobAtivo })
     const agora = new Date()
 
     setResultado({
@@ -95,10 +86,11 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
       ric,
       alvo,
       fs,
-      dose: doseTotal,
-      doseBase: Math.round(doseBase * 2) / 2,
-      doseCorrecao: Math.round(correcao * 2) / 2,
-      doseIOB: iob,
+      dose: conta.total,
+      doseExata: umDecimal(Math.max(0, conta.base + conta.correcao - conta.iob)),
+      doseBase: umDecimal(conta.base),
+      doseCorrecao: umDecimal(conta.correcao),
+      doseIOB: umDecimal(conta.iob),
       insulina: perfil.insulin,
       perfil: perfil.nome,
       modoSimples: Boolean(perfil.modoSimples),
@@ -303,6 +295,8 @@ function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, 
         </div>
       </Card>
 
+      {resultado?.glicemiaAtual > 0 && resultado.glicemiaAtual < LIMITE_HIPO_MGDL && <AlertaHipoglicemia mgdl={resultado.glicemiaAtual} />}
+
       <AvisoMedico />
 
       {resultado && (
@@ -326,6 +320,19 @@ function IndicadorGlicemia({ glicemia }) {
     <div style={{ fontSize:12, color:cor, padding:'5px 12px', background:`${cor}15`, borderRadius:100, display:'inline-flex', gap:6, border:`1px solid ${cor}30` }}>
       {isMmol ? <span>{g} mmol/L = {mgdl} mg/dL</span> : <span>{mgdl} mg/dL</span>}
       <strong>{label}</strong>
+    </div>
+  )
+}
+
+function AlertaHipoglicemia({ mgdl }) {
+  return (
+    <div style={{ background:'rgba(255,77,109,.12)', border:'1px solid rgba(255,77,109,.5)', borderRadius:14, padding:'12px 14px', display:'flex', gap:10, fontSize:13, color:C.danger, lineHeight:1.6, marginBottom:14 }}>
+      <span>🚨</span>
+      <span>
+        <strong>Glicemia baixa ({mgdl} mg/dL).</strong> Trate a hipoglicemia primeiro (cerca de 15 g de
+        carboidrato de ação rápida), meça de novo em 15 minutos e só então decida a dose — <strong>com
+        seu médico</strong>. Não aplique insulina com a glicemia baixa.
+      </span>
     </div>
   )
 }
@@ -371,6 +378,7 @@ function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, savedId, des
               ? <> − desconto: <strong style={{ color:C.green }}>{resultado.doseCorrecao} UI</strong></>
               : null}
             {resultado.doseIOB > 0 && <> − insulina ativa: <strong style={{ color:C.green }}>-{resultado.doseIOB} UI</strong></>}
+            <div style={{ marginTop:4, color:C.text3 }}>= {resultado.doseExata} UI exatos → arredondado para <strong style={{ color:C.text }}>{resultado.dose} UI</strong> (passo de 0,5)</div>
           </div>
         )}
 
