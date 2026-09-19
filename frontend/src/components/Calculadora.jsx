@@ -11,7 +11,8 @@
 // Fórmula usada:
 //   dose_base = (carboidratos_totais / RIC)
 //   correção  = (glicemia_atual - glicemia_alvo) / fator_sensibilidade
-//   dose_final = dose_base + correção  (nunca negativa)
+//   dose_final = base + correção − insulina ativa, nunca negativa, arredondada
+//                PARA BAIXO em passos de 0,5 UI (ver utils/dose.js)
 
 import { useState, useEffect } from 'react'
 import { C } from '../theme'
@@ -378,7 +379,7 @@ function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, savedId, des
               ? <> − desconto: <strong style={{ color:C.green }}>{resultado.doseCorrecao} UI</strong></>
               : null}
             {resultado.doseIOB > 0 && <> − insulina ativa: <strong style={{ color:C.green }}>-{resultado.doseIOB} UI</strong></>}
-            <div style={{ marginTop:4, color:C.text3 }}>= {resultado.doseExata} UI exatos → arredondado para <strong style={{ color:C.text }}>{resultado.dose} UI</strong> (passo de 0,5)</div>
+            <div style={{ marginTop:4, color:C.text3 }}>= {resultado.doseExata} UI exatos → arredondado para baixo: <strong style={{ color:C.text }}>{resultado.dose} UI</strong> (passo de 0,5)</div>
           </div>
         )}
 
@@ -412,7 +413,11 @@ function ResultadoDose({ resultado, dicaInsulina, salvou, onSalvar, savedId, des
 
         {resultado.dose === 0 && (
           <div style={{ marginTop:14, padding:'10px 14px', background:C.greenDim, border:'1px solid rgba(0,229,160,.2)', borderRadius:12, fontSize:13, color:C.green }}>
-            {resultado.somenteCorrecao ? '✅ Dentro da meta — sem necessidade de correção!' : '✅ Sem carboidratos — nenhuma dose necessária!'}
+            {resultado.somenteCorrecao
+              ? (resultado.glicemiaAtual > resultado.alvo
+                  ? `✅ Correção calculada de ${resultado.doseExata} UI é menor que 0,5 UI (o menor passo) — nada a aplicar agora.`
+                  : '✅ Dentro da meta — sem necessidade de correção!')
+              : '✅ Sem carboidratos — nenhuma dose necessária!'}
           </div>
         )}
       </div>
