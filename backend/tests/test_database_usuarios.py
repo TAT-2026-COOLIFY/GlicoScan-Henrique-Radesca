@@ -81,3 +81,20 @@ def test_por_dia_traz_media_de_glicemia_ignorando_zeros(banco_temporario):
 def test_por_dia_sem_nenhuma_glicemia_registrada_no_dia_fica_none(banco_temporario):
     db.adicionar_historico(_item('A'), 'ana')
     assert db.obter_estatisticas('ana')['por_dia'][0]['glicemia'] is None
+
+
+def test_hora_gravada_usa_o_fuso_do_app_e_nao_o_do_servidor(banco_temporario, monkeypatch):
+    # Render roda em UTC; sem fuso fixo a hora saía adiantada e o IOB (insulina
+    # ativa) tratava a dose recém-aplicada como "no futuro", ignorando-a.
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    import config
+
+    monkeypatch.setattr(config, 'APP_TZ', 'Pacific/Kiritimati')  # UTC+14: longe de qualquer fuso real do dev
+    hora = lambda: datetime.now(ZoneInfo('Pacific/Kiritimati')).strftime('%H:%M')
+    antes = hora()
+    db.adicionar_historico(_item('A'), 'ana')
+    depois = hora()
+
+    assert db.listar_historico('ana')[0]['hora'] in {antes, depois}

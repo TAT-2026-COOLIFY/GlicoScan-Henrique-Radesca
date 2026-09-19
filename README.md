@@ -192,6 +192,16 @@ uma pessoa:
    (5 tentativas/min na senha do médico, 10 OCR/min...) valeriam pro app
    inteiro, não por pessoa.
 
+10. **Conta da dose revisada** (`frontend/src/utils/dose.js`, 19 testes) —
+    dose = carboidratos/RIC + (glicemia − alvo)/FS − insulina ativa (IOB),
+    nunca negativa, arredondada **para baixo** em passos de 0,5 UI (errar pra
+    menos deixa a glicemia um pouco mais alta; errar pra mais causa
+    hipoglicemia). Ex.: alvo 100, FS 50, glicemia 120 → correção exata 0,4 UI
+    → nada a aplicar (antes o app arredondava pra 0,5). A IOB entra exata na
+    conta e a hora do histórico é gravada em `America/Sao_Paulo` (o Render
+    roda em UTC: sem isso a IOB ignorava doses recentes). Glicemia abaixo de
+    70 mg/dL mostra alerta vermelho: tratar antes de decidir a dose.
+
 ## Perfis (família no mesmo aparelho)
 
 O app suporta múltiplos perfis — pensado pra família usando o mesmo
