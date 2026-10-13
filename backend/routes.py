@@ -14,6 +14,7 @@ from flask import Blueprint, request, jsonify, g
 
 import database as db
 import parsing
+import config
 from config import OCR_API_KEY, CALORIE_API_KEY, SUPABASE_URL, DOCTOR_PASSWORD
 from extensions import limiter
 from services import ocr, openfoodfacts, usda, fatsecret, supabase_auth
@@ -24,14 +25,14 @@ bp = Blueprint('rotas', __name__)
 @bp.before_request
 def _exigir_login():
     """
-    Toda rota (menos /health, que o monitor de uptime do Render usa) exige
+    Toda rota (menos /health e /health/db, que o monitor de uptime do Render usa) exige
     o token de login do Supabase no header Authorization. O dono dos dados
     vem SEMPRE do token (g.user_id) — nunca de parâmetro mandado pelo
     cliente. Sem SUPABASE_URL configurado (dev local), roda aberto com um
     único usuário "local" — mas no Render (que define RENDER=true) isso
     NUNCA vale: variável esquecida ou com nome errado não pode abrir a API.
     """
-    if request.method == 'OPTIONS' or request.path == '/health':
+    if request.method == 'OPTIONS' or request.path in ('/health', '/health/db'):
         return None
     if not SUPABASE_URL:
         if os.environ.get('RENDER'):
@@ -313,17 +314,21 @@ def health():
         'ocr': 'OK' if OCR_API_KEY != 'SUA_CHAVE_AQUI' else 'sem chave',
         'fatsecret': 'configurado',
         'off': 'v2',
-        'cache': 'SQLite',
+        'cache': 'Postgres' if config.DATABASE_URL else 'SQLite',
         # Frontend usa isso pra saber se deve mostrar o cadeado da config
         # clínica — sem DOCTOR_PASSWORD configurada, fica sempre editável.
         'trava_medica': bool(DOCTOR_PASSWORD),
     })
 
 
+@bp.route('/health/db')
+@limiter.exempt  # chamado por cron (GitHub Actions) pra manter o Supabase ativo
+def health_db():
+    ok = db.ping()
+    return jsonify({'db': 'ok' if ok else 'erro'}), (200 if ok else 503)
+
+
 @bp.route('/limpar-cache')
 def limpar_cache():
-    conn = db.get_connection()
-    conn.execute('DELETE FROM cache_busca')
-    conn.commit()
-    conn.close()
+    db.limpar_cache()
     return jsonify({'ok': True, 'msg': 'Cache limpo!'})

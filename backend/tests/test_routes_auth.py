@@ -112,3 +112,15 @@ def test_estatisticas_so_contam_o_meu(cliente):
 
     stats = cliente.get('/stats', headers=_como('token-ana')).get_json()
     assert stats['total_calculos'] == 1
+
+
+def test_health_db_e_publico_e_responde_ok(cliente):
+    # Chamado por cron sem token: precisa passar pelo login.
+    r = cliente.get('/health/db')
+    assert r.status_code == 200
+    assert r.get_json() == {'db': 'ok'}
+
+
+def test_health_db_devolve_503_se_banco_cai(cliente, monkeypatch):
+    monkeypatch.setattr(db, 'ping', lambda: False)
+    assert cliente.get('/health/db').status_code == 503

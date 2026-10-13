@@ -1,10 +1,14 @@
 """
-database.py — Camada de acesso ao SQLite
+database.py — Camada de acesso ao banco (Postgres em produção, SQLite local)
 ─────────────────────────────────────────────────────────────────────
 Duas tabelas:
   historico    → cada cálculo de dose que o usuário salvou
   cache_busca  → resultados de buscas (por nome ou código de barras),
                  evita bater na API externa toda vez pro mesmo produto
+
+Com DATABASE_URL configurada (Postgres do Supabase) os dados ficam
+fora do Render e sobrevivem a deploys. Sem ela, usa o SQLite local
+(DB_PATH) — comportamento de desenvolvimento e dos testes.
 """
 import sqlite3
 import json
@@ -12,55 +16,98 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import config
-from config import DB_PATH
+from config import DB_PATH, DATABASE_URL
 
 # Nome padrão do perfil quando o frontend não manda um (só informativo —
 # quem separa o histórico entre pessoas é user_id, não este nome).
 PERFIL_PADRAO = 'Perfil 1'
 
 
+class _Conexao:
+    """Fachada fina sobre sqlite3/psycopg: mesmo SQL (placeholder `?`) e linhas
+    acessíveis por nome nos dois bancos."""
+
+    def __init__(self):
+        self.postgres = bool(DATABASE_URL)
+        if self.postgres:
+            import psycopg
+            from psycopg.rows import dict_row
+            # prepare_threshold=None: compatível com o pooler do Supabase
+            # (pgbouncer), que não aceita prepared statements.
+            self._c = psycopg.connect(
+                DATABASE_URL, row_factory=dict_row, connect_timeout=10, prepare_threshold=None
+            )
+        else:
+            self._c = sqlite3.connect(DB_PATH)
+            self._c.row_factory = sqlite3.Row
+
+    def execute(self, sql, params=()):
+        if self.postgres:
+            sql = sql.replace('?', '%s')
+        return self._c.execute(sql, params)
+
+    def commit(self):
+        self._c.commit()
+
+    def close(self):
+        self._c.close()
+
+
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    return _Conexao()
 
 
 def init_db():
     """Cria as tabelas se ainda não existirem. Chamado uma vez ao subir o servidor."""
     conn = get_connection()
-    conn.executescript('''
+    pk = 'BIGSERIAL PRIMARY KEY' if conn.postgres else 'INTEGER PRIMARY KEY AUTOINCREMENT'
+    conn.execute(f'''
         CREATE TABLE IF NOT EXISTS historico (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {pk},
             produto TEXT, porcao TEXT, unidade TEXT,
-            carboidratos REAL, acucares REAL, fibras REAL,
-            proteinas REAL, gorduras REAL, calorias REAL,
-            carbo_total REAL, porcoes REAL, ric INTEGER,
-            dose REAL, insulina TEXT, glicemia_atual REAL,
+            carboidratos DOUBLE PRECISION, acucares DOUBLE PRECISION, fibras DOUBLE PRECISION,
+            proteinas DOUBLE PRECISION, gorduras DOUBLE PRECISION, calorias DOUBLE PRECISION,
+            carbo_total DOUBLE PRECISION, porcoes DOUBLE PRECISION, ric DOUBLE PRECISION,
+            dose DOUBLE PRECISION, insulina TEXT, glicemia_atual DOUBLE PRECISION,
             data TEXT, hora TEXT, perfil TEXT, observacao TEXT, user_id TEXT
-        );
+        )
+    ''')
+    conn.execute(f'''
         CREATE TABLE IF NOT EXISTS cache_busca (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {pk},
             query TEXT UNIQUE,
             resultado TEXT,
             criado_em TEXT
-        );
+        )
     ''')
-    # Migração pra bancos criados antes de existir perfil (múltiplas
-    # "regulagens" no mesmo app) — coluna nova não some das linhas antigas.
-    try:
-        conn.execute('ALTER TABLE historico ADD COLUMN perfil TEXT')
-    except sqlite3.OperationalError:
-        pass  # coluna já existe
-    try:
-        conn.execute('ALTER TABLE historico ADD COLUMN observacao TEXT')
-    except sqlite3.OperationalError:
-        pass  # coluna já existe
-    # Dono da linha (id do usuário no Supabase). Linhas antigas ficam NULL
-    # e não aparecem pra ninguém — eram de antes de existir login.
-    try:
-        conn.execute('ALTER TABLE historico ADD COLUMN user_id TEXT')
-    except sqlite3.OperationalError:
-        pass  # coluna já existe
+    if conn.postgres:
+        # O Supabase expõe o schema public via API REST com a chave pública
+        # (que está no frontend). RLS ligado e sem nenhuma policy = a API
+        # REST não enxerga nada; o backend conecta como dono e ignora o RLS.
+        conn.execute('ALTER TABLE historico ENABLE ROW LEVEL SECURITY')
+        conn.execute('ALTER TABLE cache_busca ENABLE ROW LEVEL SECURITY')
+    else:
+        # Migração pra bancos SQLite criados antes de existirem estas colunas.
+        # (user_id: linhas antigas ficam NULL e não aparecem pra ninguém.)
+        for coluna in ('perfil', 'observacao', 'user_id'):
+            try:
+                conn.execute(f'ALTER TABLE historico ADD COLUMN {coluna} TEXT')
+            except sqlite3.OperationalError:
+                pass  # coluna já existe
     conn.commit()
     conn.close()
+
+
+def ping():
+    """True se o banco responde. Usado pelo /health/db, que o cron do GitHub
+    Actions chama pra manter o projeto do Supabase ativo."""
+    try:
+        conn = get_connection()
+        conn.execute('SELECT 1').fetchone()
+        conn.close()
+        return True
+    except Exception:
+        return False
 
 
 # ── Cache de buscas ────────────────────────────────────────────────
@@ -76,9 +123,9 @@ def buscar_no_cache(chave, validade_horas=24):
     if not row:
         return None
     try:
-        criado_em = datetime.fromisoformat(row[1])
+        criado_em = datetime.fromisoformat(row['criado_em'])
         if datetime.now() - criado_em < timedelta(hours=validade_horas):
-            return json.loads(row[0])
+            return json.loads(row['resultado'])
     except Exception:
         pass
     return None
@@ -87,7 +134,9 @@ def buscar_no_cache(chave, validade_horas=24):
 def salvar_no_cache(chave, resultado):
     conn = get_connection()
     conn.execute(
-        'INSERT OR REPLACE INTO cache_busca (query, resultado, criado_em) VALUES (?,?,?)',
+        '''INSERT INTO cache_busca (query, resultado, criado_em) VALUES (?,?,?)
+           ON CONFLICT (query) DO UPDATE
+           SET resultado = excluded.resultado, criado_em = excluded.criado_em''',
         (chave, json.dumps(resultado), datetime.now().isoformat())
     )
     conn.commit()
@@ -110,8 +159,8 @@ def buscar_cache_barcode(code):
         return None, None
 
     try:
-        cached = json.loads(row[0])
-        idade_dias = (datetime.now() - datetime.fromisoformat(row[1])).days
+        cached = json.loads(row['resultado'])
+        idade_dias = (datetime.now() - datetime.fromisoformat(row['criado_em'])).days
         tem_valores = cached.get('carboidratos', 0) > 0 or cached.get('calorias', 0) > 0
 
         if not tem_valores:
@@ -129,11 +178,17 @@ def buscar_cache_barcode(code):
         return None, None
 
 
+def limpar_cache():
+    conn = get_connection()
+    conn.execute('DELETE FROM cache_busca')
+    conn.commit()
+    conn.close()
+
+
 # ── Histórico de cálculos ────────────────────────────────────────
 
 def listar_historico(user_id, limite=100):
     conn = get_connection()
-    conn.row_factory = sqlite3.Row
     rows = conn.execute(
         'SELECT * FROM historico WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limite)
     ).fetchall()
@@ -144,10 +199,11 @@ def listar_historico(user_id, limite=100):
 def adicionar_historico(d, user_id):
     conn = get_connection()
     agora = datetime.now(ZoneInfo(config.APP_TZ))
-    cursor = conn.execute('''INSERT INTO historico
+    novo_id = conn.execute('''INSERT INTO historico
         (produto,porcao,unidade,carboidratos,acucares,fibras,proteinas,gorduras,
          calorias,carbo_total,porcoes,ric,dose,insulina,glicemia_atual,data,hora,perfil,observacao,user_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        RETURNING id''', (
         d.get('produto', ''), d.get('porcao', ''), d.get('unidade', ''),
         d.get('carboidratos', 0), d.get('acucares', 0), d.get('fibras', 0),
         d.get('proteinas', 0), d.get('gorduras', 0), d.get('calorias', 0),
@@ -155,8 +211,7 @@ def adicionar_historico(d, user_id):
         d.get('dose', 0), d.get('insulina', ''), d.get('glicemiaAtual', 0),
         agora.strftime('%d/%m/%Y'), agora.strftime('%H:%M'), d.get('perfil') or PERFIL_PADRAO,
         d.get('observacao') or '', user_id,
-    ))
-    novo_id = cursor.lastrowid
+    )).fetchone()['id']
     conn.commit()
     conn.close()
     return novo_id
@@ -178,7 +233,6 @@ def limpar_historico(user_id):
 
 def obter_estatisticas(user_id):
     conn = get_connection()
-    conn.row_factory = sqlite3.Row
 
     where, params = 'WHERE user_id = ?', (user_id,)
 
@@ -188,7 +242,7 @@ def obter_estatisticas(user_id):
     por_dia = conn.execute(f'''
         SELECT data, SUM(carbo_total) as carbo, SUM(dose) as dose, COUNT(*) as ref,
                AVG(CASE WHEN glicemia_atual > 0 THEN glicemia_atual END) as glicemia
-        FROM historico {where} GROUP BY data ORDER BY id DESC LIMIT 7
+        FROM historico {where} GROUP BY data ORDER BY MAX(id) DESC LIMIT 7
     ''', params).fetchall()
     mais_consumidos = conn.execute(f'''
         SELECT produto, COUNT(*) as v FROM historico {where} GROUP BY produto ORDER BY v DESC LIMIT 5

@@ -78,7 +78,11 @@ OFF_BARCODE_ENDPOINTS = [
 # proteger contra empilhar insulina.
 APP_TZ = os.environ.get('APP_TZ', 'America/Sao_Paulo')
 
-# Em produção (Render, Railway etc.) normalmente não há disco persistente
-# garantido — use um volume/persistent disk se quiser manter o SQLite
-# entre deploys. Para desenvolvimento local, fica ao lado deste arquivo.
+# Banco de produção: string de conexão do Postgres do Supabase (use a do
+# "Session pooler", porta 5432 — o Render só fala IPv4 e a conexão direta
+# do Supabase é IPv6). Vazio = usa o SQLite local abaixo (dev e testes).
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+
+# SQLite local — só quando DATABASE_URL está vazia. No Render o disco
+# reseta a cada deploy, por isso produção usa o Postgres acima.
 DB_PATH = os.environ.get('DB_PATH', os.path.join(os.path.dirname(__file__), 'glicoscan.db'))

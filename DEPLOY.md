@@ -65,6 +65,13 @@ a serem commitados.
      (senão qualquer um cria conta chamando a API direto com a chave
      pública) e crie cada conta em Authentication → Users → Add user
      (marque "Auto Confirm User").
+   - `DATABASE_URL` — **recomendado**: guarda histórico e cache no Postgres
+     do Supabase em vez do SQLite do Render (que zera a cada deploy). No
+     painel: botão **Connect** → **Session pooler** (porta 5432) → copie a
+     string e troque `[YOUR-PASSWORD]` pela senha do banco. Não use a
+     "Direct connection": é IPv6 e o Render free não alcança. As tabelas
+     são criadas sozinhas no primeiro start. Sem esta variável o app cai
+     no SQLite local.
    - `DOCTOR_PASSWORD` — opcional. Se preencher, RIC/tipo de insulina/
      glicemia alvo/fator de sensibilidade ficam só leitura no app até
      alguém digitar essa senha (desbloqueia por 15min). Deixe em branco
