@@ -16,6 +16,9 @@ import os
 import busca
 
 CAMINHO_CSV = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'taco.csv')
+# Itens que a própria TACO deixou sem carboidrato (ex.: leite integral fluido), completados
+# com a USDA FoodData Central. Cada linha cita a fonte; aparecem rotulados na busca.
+CAMINHO_COMPLEMENTOS = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'complementos.csv')
 
 _alimentos = None    # lista de dicts já normalizados (None = ainda não carregou)
 _vocabulario = []    # palavras conhecidas, pra corrigir erro de digitação
@@ -28,24 +31,19 @@ def _numero(valor):
         return 0.0
 
 
-def _carregar():
-    global _alimentos, _vocabulario
-    if _alimentos is not None:
-        return
-    _alimentos, vocab = [], set()
+def _ler_csv(caminho, fonte_padrao):
+    itens = []
     try:
-        with open(CAMINHO_CSV, encoding='utf-8-sig', newline='') as f:
+        with open(caminho, encoding='utf-8-sig', newline='') as f:
             for linha in csv.DictReader(f):
                 nome = (linha.get('nome') or '').strip()
                 if not nome:
                     continue
-                toks = busca.tokens(nome)
-                vocab.update(toks)
-                _alimentos.append({
+                itens.append({
                     'nome': nome[:60],
                     'categoria': (linha.get('categoria') or '').strip(),
-                    '_toks': toks,
-                    '_norm': ' '.join(toks),
+                    'fonte': fonte_padrao if not linha.get('fonte') else '🇺🇸 USDA (complemento à TACO)',
+                    'origem_dado': (linha.get('fonte') or '').strip(),
                     'calorias': _numero(linha.get('energia_kcal')),
                     'proteinas': _numero(linha.get('proteina_g')),
                     'gorduras': _numero(linha.get('lipidios_g')),
@@ -54,7 +52,21 @@ def _carregar():
                     'acucares': _numero(linha.get('acucar_g')),
                 })
     except FileNotFoundError:
-        print(f"⚠️ TACO: {CAMINHO_CSV} não encontrado — busca de alimentos genéricos desativada")
+        print(f"⚠️ TACO: {caminho} não encontrado")
+    return itens
+
+
+def _carregar():
+    global _alimentos, _vocabulario
+    if _alimentos is not None:
+        return
+    itens = _ler_csv(CAMINHO_CSV, '🇧🇷 TACO (Unicamp)') + _ler_csv(CAMINHO_COMPLEMENTOS, '')
+    vocab = set()
+    for a in itens:
+        a['_toks'] = busca.tokens(a['nome'])
+        a['_norm'] = ' '.join(a['_toks'])
+        vocab.update(a['_toks'])
+    _alimentos = itens
     _vocabulario = sorted(vocab)
 
 
@@ -87,6 +99,8 @@ _PREFERIDOS = {
     'mamao': 'Mamão, Formosa, cru',
     'ovo': 'Ovo, de galinha, inteiro, cozido/10minutos',
     'cenoura': 'Cenoura, cozida',
+    'leite': 'Leite, de vaca, integral (fluido)',
+    'macarrao': 'Macarrão, trigo, cozido',
 }
 
 
@@ -130,7 +144,7 @@ def buscar(texto, limite=6):
     return [{
         'nome': a['nome'],
         'marca': a['categoria'],
-        'fonte': '🇧🇷 TACO (Unicamp)',
+        'fonte': a['fonte'],
         'porcao': '100g',
         'unidade': '',
         'base': '100g',

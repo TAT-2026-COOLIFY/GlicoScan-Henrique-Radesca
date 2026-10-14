@@ -58,3 +58,17 @@ def test_alimentos_fixados_no_topo_existem_na_tabela_e_aparecem_primeiro():
     for consulta, nome in taco._PREFERIDOS.items():
         assert nome in nomes, f'{nome!r} (fixado para {consulta!r}) não existe em taco.csv'
         assert taco.buscar(consulta)[0]['nome'] == nome
+
+
+def test_complementos_usda_estao_rotulados_e_com_valores_plausiveis():
+    leite = _achar('leite', 'Leite, de vaca, integral (fluido)')
+    assert 'USDA' in leite['fonte']
+    assert 4.0 <= leite['carboidratos'] <= 5.5       # lactose ~4,7 g/100 mL
+    massa = _achar('macarrão', 'Macarrão, trigo, cozido')
+    assert 25 <= massa['carboidratos'] <= 35          # cozido; o cru tem ~77 g
+    assert taco.buscar('leite')[0]['nome'] == 'Leite, de vaca, integral (fluido)'
+    assert taco.buscar('macarrão')[0]['nome'] == 'Macarrão, trigo, cozido'
+
+
+def test_itens_da_taco_continuam_com_rotulo_taco():
+    assert 'TACO' in _achar('arroz', 'Arroz, tipo 1, cozido')['fonte']
