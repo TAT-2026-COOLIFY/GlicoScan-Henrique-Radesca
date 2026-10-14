@@ -101,6 +101,23 @@ def _processar_produto(p):
     nome = p.get('product_name_pt') or p.get('product_name') or p.get('brands') or ''
     serving_txt = p.get('serving_size') or ''
     porcao = serving_txt or (f'{serving_qty}g' if serving_qty else '—')
+
+    # A OFF só traz valores por 100g pra muitos produtos. Sem tamanho de porção
+    # os valores acima ficam em 100g — a tela precisa dizer isso, senão o
+    # usuário calcula a dose achando que é "1 porção".
+    tem_valor_por_porcao = any(
+        nutrientes.get(f'{k}_serving') not in (None, '', 0)
+        for k in ('carbohydrates', 'energy-kcal', 'proteins', 'fat')
+    )
+    if serving_qty <= 0 and not tem_valor_por_porcao:
+        porcao = '100g'
+
+    # Existe ALGUM nutriente cadastrado? (zero explícito conta: água tem carbo 0)
+    tem_dado = any(
+        nutrientes.get(f'{k}{suf}') not in (None, '')
+        for k in ('carbohydrates', 'energy-kcal', 'proteins', 'fat', 'sugars')
+        for suf in ('_100g', '_serving')
+    )
     categorias = p.get('categories_tags', [])
     unidade = _extrair_unidade(serving_txt) or _inferir_unidade_por_categoria(categorias, serving_qty)
 
@@ -138,7 +155,7 @@ def _processar_produto(p):
         # Campos internos (não expostos na resposta final) usados
         # só pra validar se o produto tem dados suficientes
         '_carbo': carbo, '_cal': cal, '_prot': prot, '_gord': gord,
-        '_sq': serving_qty, '_nome': nome,
+        '_sq': serving_qty, '_nome': nome, '_tem_dado': tem_dado,
     }
 
 
@@ -151,13 +168,26 @@ def _limpar_campos_internos(r):
     return {k: v for k, v in r.items() if not k.startswith('_')}
 
 
-def buscar_por_codigo(code):
+def buscar_por_codigo_detalhado(codigos):
     """
-    Tenta os 4 endpoints da OFF em cascata (dois domínios × duas versões
-    de API), retornando assim que um responder com dados válidos.
-    Retorna None se nenhum encontrar o produto.
+    Tenta os endpoints da OFF em cascata (dois domínios × duas versões de API).
+    `codigos` são formas equivalentes do mesmo GTIN (ver busca.variantes_codigo):
+    a 1ª vai em todos os endpoints, as demais só no 1º (evita 8+ chamadas lentas).
+
+    Retorna (completo, parcial):
+      completo → produto com dados nutricionais (já no formato interno)
+      parcial  → produto existe na OFF mas SEM nutrientes cadastrados (comum em
+                 produto brasileiro cadastrado só com foto). O nome serve pra
+                 pedir a foto da tabela em vez de dizer "não encontrado".
     """
-    for template_url in OFF_BARCODE_ENDPOINTS:
+    if isinstance(codigos, str):
+        codigos = [codigos]
+    parcial = None
+
+    tentativas = [(codigos[0], t) for t in OFF_BARCODE_ENDPOINTS] if codigos else []
+    tentativas += [(c, OFF_BARCODE_ENDPOINTS[0]) for c in codigos[1:]]
+
+    for code, template_url in tentativas:
         url = template_url.format(code=code)
         try:
             r = requests.get(url, headers=USER_AGENT, timeout=8)
@@ -168,24 +198,36 @@ def buscar_por_codigo(code):
                 continue
 
             resultado = _processar_produto(data.get('product', {}))
-            if _dados_validos(resultado):
-                return _limpar_campos_internos(resultado)
+            if resultado['_tem_dado'] and _dados_validos(resultado):
+                return _limpar_campos_internos(resultado), None
+            if resultado['_nome'] and parcial is None:
+                parcial = {
+                    'produto': resultado['produto'],
+                    'imagem': resultado['imagem'],
+                    'embalagem': resultado['embalagem'],
+                }
         except Exception as e:
             print(f"⚠️ OFF ({url.split('/')[2]}): {e}")
             continue
-    return None
+    return None, parcial
+
+
+def buscar_por_codigo(code):
+    """Atalho: só o produto completo (ou None)."""
+    return buscar_por_codigo_detalhado([code])[0]
 
 
 def buscar_por_nome(nome):
-    """Busca textual na OFF (usada na tela de busca manual, quando o código de barras não é encontrado)."""
+    """Busca textual na OFF (tela de busca por nome). Mesmo formato dos outros resultados, com `base`."""
     try:
         r = requests.get(OFF_SEARCH_URL, params={
             'search_terms': nome,
             'search_simple': 1,
             'action': 'process',
             'json': 1,
-            'page_size': 12,
-            'fields': 'product_name,brands,nutriments,serving_size,image_small_url,countries_tags,lang',
+            'page_size': 15,
+            'fields': 'product_name,product_name_pt,brands,nutriments,serving_size,serving_quantity,'
+                      'image_small_url,countries_tags,categories_tags',
             'countries_tags': 'en:brazil',
         }, headers=USER_AGENT, timeout=12)
         if r.status_code != 200:
@@ -193,32 +235,28 @@ def buscar_por_nome(nome):
 
         produtos = []
         for p in r.json().get('products', []):
-            nutrientes = p.get('nutriments', {})
-            nome_prod = p.get('product_name', '') or p.get('brands', '')
-            if not nome_prod:
-                continue
-
             paises = p.get('countries_tags', [])
             if paises and not any('brazil' in pa or 'brasil' in pa for pa in paises):
                 continue
 
-            def valor(chave):
-                v = nutrientes.get(f'{chave}_serving') or nutrientes.get(f'{chave}_100g') or 0
-                try: return round(float(v), 1)
-                except (TypeError, ValueError): return 0
+            proc = _processar_produto(p)
+            if not proc['_nome'] or not proc['_tem_dado']:
+                continue  # sem nutrientes não serve de sugestão: levaria a dose com carbo 0
 
             produtos.append({
-                'nome': nome_prod[:60],
+                'nome': proc['produto'],
                 'marca': p.get('brands', ''),
                 'fonte': '🌍 Open Food Facts',
-                'porcao': p.get('serving_size', '—'),
-                'calorias': valor('energy-kcal'),
-                'carboidratos': valor('carbohydrates'),
-                'acucares': valor('sugars'),
-                'fibras': valor('fiber'),
-                'proteinas': valor('proteins'),
-                'gorduras': valor('fat'),
-                'imagem': p.get('image_small_url', ''),
+                'porcao': proc['porcao'],
+                'unidade': proc['unidade'],
+                'base': '100g' if proc['porcao'] == '100g' else 'porcao',
+                'calorias': proc['calorias'],
+                'carboidratos': proc['carboidratos'],
+                'acucares': proc['acucares'],
+                'fibras': proc['fibras'],
+                'proteinas': proc['proteinas'],
+                'gorduras': proc['gorduras'],
+                'imagem': proc['imagem'],
             })
         return produtos
     except Exception as e:

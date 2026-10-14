@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { valorSuspeito, gerarDescricao } from './nutrition'
+import { valorSuspeito, gerarDescricao, gramasParaPorcoes, porcoesParaGramas } from './nutrition'
 
 describe('valorSuspeito', () => {
   it('acusa carboidrato maior que o peso da porção', () => {
@@ -46,5 +46,30 @@ describe('gerarDescricao', () => {
 
   it('usa fallback genérico quando não há porção nem unidade', () => {
     expect(gerarDescricao(2, '—', '—')).toBe('2 porção(ões)')
+  })
+})
+
+describe('gramasParaPorcoes / porcoesParaGramas (alimentos por 100g)', () => {
+  it('converte gramas em porções de 100g', () => {
+    expect(gramasParaPorcoes(150)).toBe(1.5)
+    expect(gramasParaPorcoes('30')).toBe(0.3)
+    expect(gramasParaPorcoes('87,5')).toBe(0.88)
+  })
+
+  it('texto inválido, zero ou negativo viram 0', () => {
+    expect(gramasParaPorcoes('')).toBe(0)
+    expect(gramasParaPorcoes('abc')).toBe(0)
+    expect(gramasParaPorcoes(0)).toBe(0)
+    expect(gramasParaPorcoes(-20)).toBe(0)
+  })
+
+  it('limita a 5000g (50 porções) pra um dedo escorregado não gerar dose absurda', () => {
+    expect(gramasParaPorcoes(999999)).toBe(50)
+  })
+
+  it('porcoesParaGramas é o inverso', () => {
+    expect(porcoesParaGramas(1.5)).toBe(150)
+    expect(porcoesParaGramas(0.3)).toBe(30)
+    expect(porcoesParaGramas(undefined)).toBe(0)
   })
 })

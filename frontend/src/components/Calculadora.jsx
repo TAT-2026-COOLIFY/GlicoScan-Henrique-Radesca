@@ -18,7 +18,7 @@ import { useState, useEffect } from 'react'
 import { C } from '../theme'
 import { INSULIN_TIPS, DURACAO_INSULINA_HORAS } from '../constants'
 import { storage } from '../utils/storage'
-import { valorSuspeito, gerarDescricao } from '../utils/nutrition'
+import { valorSuspeito, gerarDescricao, gramasParaPorcoes, porcoesParaGramas } from '../utils/nutrition'
 import { calcularIOB } from '../utils/iob'
 import { calcularDose, glicemiaParaMgdl, umDecimal, LIMITE_HIPO_MGDL } from '../utils/dose'
 import { Card } from './Layout'
@@ -46,6 +46,9 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
   const [desfeito, setDesfeito]     = useState(false)
   const [observacao, setObservacao] = useState('')
   const [iobAtivo, setIobAtivo]     = useState(0)
+  // "Lembrar este produto": valores lidos da foto ou digitados valem a pena guardar;
+  // os que vieram prontos da base só se o usuário corrigir (e marcar).
+  const [lembrar, setLembrar]       = useState(['ocr', 'manual'].includes(nutrition.origem))
 
   const camposSuspeitos = CAMPOS_NUTRICIONAIS
     .map(([chave]) => chave)
@@ -109,6 +112,28 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portions, editNut, iobAtivo])
 
+  // Guarda os valores confirmados na conta ("Meus produtos"): o próximo scan do mesmo
+  // código já vem daqui, sem depender das bases externas. Falha não trava o cálculo.
+  const lembrarProduto = async () => {
+    try {
+      const r = await apiFetch('/meus-produtos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          codigo: nutrition.codigo || '',
+          nome: nomeProd || editNut.produto,
+          porcao: editNut.porcao, unidade: editNut.unidade, embalagem: editNut.embalagem || '',
+          carboidratos: editNut.carboidratos, acucares: editNut.acucares, fibras: editNut.fibras,
+          proteinas: editNut.proteinas, gorduras: editNut.gorduras, calorias: editNut.calorias,
+        }),
+      })
+      if (r.ok) showToast('⭐ Produto salvo em "Meus produtos"')
+      else showToast(`⚠️ ${(await r.json().catch(() => ({}))).erro || 'Não foi possível salvar o produto'}`, 'err')
+    } catch {
+      showToast('⚠️ Não foi possível salvar o produto', 'err')
+    }
+  }
+
   const salvarNoHistorico = async () => {
     if (!resultado || salvou) return
     setSalvou(true)
@@ -150,8 +175,12 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
         editNut={editNut} setEditNut={setEditNut}
         nomeProd={nomeProd} setNomeProd={setNomeProd}
         camposSuspeitos={camposSuspeitos}
-        fonte={fonte}
-        onConfirmar={() => { setConfirmado(true); calcular(1) }}
+        fonte={fonte} origem={nutrition.origem}
+        lembrar={lembrar} setLembrar={setLembrar}
+        onConfirmar={() => {
+          if (lembrar) lembrarProduto()
+          setConfirmado(true); calcular(1)
+        }}
         onReset={onReset}
       />
     )
@@ -175,7 +204,7 @@ export default function Calculadora({ nutrition, showToast, onReset, fonte, some
 }
 
 // ── Subcomponente: tela de confirmação dos valores ────────────────
-function TelaConfirmacao({ editNut, setEditNut, nomeProd, setNomeProd, camposSuspeitos, fonte, onConfirmar, onReset }) {
+function TelaConfirmacao({ editNut, setEditNut, nomeProd, setNomeProd, camposSuspeitos, fonte, origem, lembrar, setLembrar, onConfirmar, onReset }) {
   return (
     <div style={{ padding:'16px 16px 28px', animation:'fadeIn .3s ease' }}>
       {camposSuspeitos.length > 0 ? (
@@ -189,6 +218,18 @@ function TelaConfirmacao({ editNut, setEditNut, nomeProd, setNomeProd, camposSus
       ) : (
         <div style={{ background:C.greenDim, border:'1px solid rgba(0,229,160,.2)', borderRadius:16, padding:'12px 16px', marginBottom:16, display:'flex', gap:10, alignItems:'center' }}>
           <span>✅</span><span style={{ fontSize:13, color:C.green, fontWeight:500 }}>Valores parecem corretos!</span>
+        </div>
+      )}
+
+      {origem === 'ocr' && (
+        <div style={{ background:'rgba(255,179,64,.08)', border:'1px solid rgba(255,179,64,.3)', borderRadius:16, padding:'12px 16px', marginBottom:16, fontSize:12, color:C.warn, lineHeight:1.6 }}>
+          📷 Valores <strong>lidos da foto</strong>. A leitura pode errar um número: compare cada campo com a
+          embalagem antes de calcular.
+        </div>
+      )}
+      {origem === 'manual' && (
+        <div style={{ background:'rgba(255,179,64,.08)', border:'1px solid rgba(255,179,64,.3)', borderRadius:16, padding:'12px 16px', marginBottom:16, fontSize:12, color:C.warn, lineHeight:1.6 }}>
+          ✍️ Digite os valores <strong>da porção</strong> que está na tabela da embalagem.
         </div>
       )}
 
@@ -243,6 +284,11 @@ function TelaConfirmacao({ editNut, setEditNut, nomeProd, setNomeProd, camposSus
         </div>
       </Card>
 
+      <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', marginBottom:14, background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, fontSize:13, color:C.text2, cursor:'pointer' }}>
+        <input type="checkbox" checked={lembrar} onChange={e => setLembrar(e.target.checked)} style={{ width:18, height:18 }} />
+        <span>⭐ Lembrar este produto <span style={{ color:C.text3, fontSize:11 }}>(da próxima vez já vem com estes valores)</span></span>
+      </label>
+
       <AvisoMedico />
 
       <button onClick={onConfirmar}
@@ -267,6 +313,7 @@ function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, 
               <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:4 }}>Porções</div>
               <div style={{ fontSize:12, color:C.accent, marginTop:4 }}>🍽️ {gerarDescricao(portions, editNut.porcao, editNut.unidade)}</div>
               <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>{+((editNut.carboidratos || 0) * portions).toFixed(1)}g de carboidrato</div>
+              {editNut.base === '100g' && <QuantidadeGramas portions={portions} setPortions={setPortions} />}
             </div>
             <div style={{ display:'flex', alignItems:'center', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:14, overflow:'hidden' }}>
               <button onClick={() => setPortions(p => +(Math.max(0.5, p - .5).toFixed(1)))} style={{ width:40, height:42, background:'none', border:'none', color:C.accent, fontSize:20, cursor:'pointer' }}>−</button>
@@ -305,6 +352,32 @@ function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, 
           onSalvar={onSalvar} savedId={savedId} desfeito={desfeito} onDesfazer={onDesfazer}
           onEditar={onEditar} onReset={onReset} />
       )}
+    </div>
+  )
+}
+
+// Alimento por 100g (tabela TACO): "1 porção" = 100g não faz sentido pra uma colher de arroz,
+// então a quantidade é digitada em gramas (e vira N/100 porções).
+function QuantidadeGramas({ portions, setPortions }) {
+  const [texto, setTexto] = useState(String(porcoesParaGramas(portions)))
+
+  // Os botões −/+ também mexem nas porções: mantém o campo de gramas em sincronia.
+  useEffect(() => {
+    if (gramasParaPorcoes(texto) !== portions) setTexto(String(porcoesParaGramas(portions)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portions])
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
+      <span style={{ fontSize:12, color:C.text2 }}>Quantidade:</span>
+      <input type="number" inputMode="decimal" min="1" value={texto}
+        onChange={e => {
+          setTexto(e.target.value)
+          const p = gramasParaPorcoes(e.target.value)
+          if (p > 0) setPortions(p)
+        }}
+        style={{ width:72, padding:'6px 8px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, fontSize:14, fontWeight:700, textAlign:'center', outline:'none', fontFamily:'inherit' }} />
+      <span style={{ fontSize:12, color:C.text2 }}>g</span>
     </div>
   )
 }
