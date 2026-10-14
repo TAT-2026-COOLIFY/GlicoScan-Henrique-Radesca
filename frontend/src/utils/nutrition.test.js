@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { valorSuspeito, gerarDescricao, gramasParaPorcoes, porcoesParaGramas } from './nutrition'
+import { valorSuspeito, gerarDescricao, gramasParaPorcoes, porcoesParaGramas, gramasDeMedida } from './nutrition'
 
 describe('valorSuspeito', () => {
   it('acusa carboidrato maior que o peso da porção', () => {
@@ -71,5 +71,21 @@ describe('gramasParaPorcoes / porcoesParaGramas (alimentos por 100g)', () => {
     expect(porcoesParaGramas(1.5)).toBe(150)
     expect(porcoesParaGramas(0.3)).toBe(30)
     expect(porcoesParaGramas(undefined)).toBe(0)
+  })
+})
+
+describe('gramasDeMedida (medidas caseiras)', () => {
+  it('multiplica a quantidade pelo peso da medida', () => {
+    expect(gramasDeMedida(2, 45)).toBe(90)
+    expect(gramasDeMedida('1,5', 25)).toBe(38)
+    expect(gramasDeMedida('0.5', 140)).toBe(70)
+  })
+
+  it('entrada inválida vira 0', () => {
+    expect(gramasDeMedida('', 45)).toBe(0)
+    expect(gramasDeMedida(2, 0)).toBe(0)
+    expect(gramasDeMedida(-1, 45)).toBe(0)
+    expect(gramasDeMedida('abc', 45)).toBe(0)
+    expect(gramasDeMedida(2, undefined)).toBe(0)
   })
 })

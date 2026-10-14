@@ -1,0 +1,4 @@
+nome,categoria,energia_kcal,proteina_g,lipidios_g,carboidrato_g,fibra_g,fonte
+"Leite, de vaca, integral (fluido)",Leite e derivados,61,3.2,3.3,4.8,0,USDA FoodData Central #172217 (Milk whole 3.25% milkfat)
+"Leite, de vaca, desnatado (fluido)",Leite e derivados,37,3.6,0.3,5.0,0,USDA FoodData Central #171270 (Milk nonfat fluid)
+"Macarrão, trigo, cozido",Cereais e derivados,158,5.8,0.9,30.9,1.8,USDA FoodData Central #169737 (Pasta cooked enriched without salt)

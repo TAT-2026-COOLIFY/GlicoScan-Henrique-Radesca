@@ -11,14 +11,20 @@ carboidrato_g, fibra_g, acucar_g (acucar_g pode ficar vazio).
 """
 import csv
 import difflib
+import json
 import os
 
 import busca
 
 CAMINHO_CSV = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'taco.csv')
+# Itens que a própria TACO deixou sem carboidrato (ex.: leite integral fluido), completados
+# com a USDA FoodData Central. Cada linha cita a fonte; aparecem rotulados na busca.
+CAMINHO_MEDIDAS = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'medidas.json')
+CAMINHO_COMPLEMENTOS = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'complementos.csv')
 
 _alimentos = None    # lista de dicts já normalizados (None = ainda não carregou)
 _vocabulario = []    # palavras conhecidas, pra corrigir erro de digitação
+_medidas = None      # nome do alimento → {'fonte', 'medidas': [{'nome', 'g'}]} (None = não carregou)
 
 
 def _numero(valor):
@@ -28,24 +34,19 @@ def _numero(valor):
         return 0.0
 
 
-def _carregar():
-    global _alimentos, _vocabulario
-    if _alimentos is not None:
-        return
-    _alimentos, vocab = [], set()
+def _ler_csv(caminho, fonte_padrao):
+    itens = []
     try:
-        with open(CAMINHO_CSV, encoding='utf-8-sig', newline='') as f:
+        with open(caminho, encoding='utf-8-sig', newline='') as f:
             for linha in csv.DictReader(f):
                 nome = (linha.get('nome') or '').strip()
                 if not nome:
                     continue
-                toks = busca.tokens(nome)
-                vocab.update(toks)
-                _alimentos.append({
+                itens.append({
                     'nome': nome[:60],
                     'categoria': (linha.get('categoria') or '').strip(),
-                    '_toks': toks,
-                    '_norm': ' '.join(toks),
+                    'fonte': fonte_padrao if not linha.get('fonte') else '🇺🇸 USDA (complemento à TACO)',
+                    'origem_dado': (linha.get('fonte') or '').strip(),
                     'calorias': _numero(linha.get('energia_kcal')),
                     'proteinas': _numero(linha.get('proteina_g')),
                     'gorduras': _numero(linha.get('lipidios_g')),
@@ -54,8 +55,35 @@ def _carregar():
                     'acucares': _numero(linha.get('acucar_g')),
                 })
     except FileNotFoundError:
-        print(f"⚠️ TACO: {CAMINHO_CSV} não encontrado — busca de alimentos genéricos desativada")
+        print(f"⚠️ TACO: {caminho} não encontrado")
+    return itens
+
+
+def _carregar():
+    global _alimentos, _vocabulario
+    if _alimentos is not None:
+        return
+    itens = _ler_csv(CAMINHO_CSV, '🇧🇷 TACO (Unicamp)') + _ler_csv(CAMINHO_COMPLEMENTOS, '')
+    vocab = set()
+    for a in itens:
+        a['_toks'] = busca.tokens(a['nome'])
+        a['_norm'] = ' '.join(a['_toks'])
+        vocab.update(a['_toks'])
+    _alimentos = itens
     _vocabulario = sorted(vocab)
+
+
+def _carregar_medidas():
+    """Medidas caseiras (colher, concha, unidade...) em gramas, por alimento. Só entram alimentos
+    revisados (ver data/gerar_medidas.py); ausência não é erro: o usuário digita em gramas."""
+    global _medidas
+    if _medidas is not None:
+        return
+    try:
+        with open(CAMINHO_MEDIDAS, encoding='utf-8') as f:
+            _medidas = json.load(f)
+    except (FileNotFoundError, ValueError):
+        _medidas = {}
 
 
 def _corrigir(palavra):
@@ -87,6 +115,8 @@ _PREFERIDOS = {
     'mamao': 'Mamão, Formosa, cru',
     'ovo': 'Ovo, de galinha, inteiro, cozido/10minutos',
     'cenoura': 'Cenoura, cozida',
+    'leite': 'Leite, de vaca, integral (fluido)',
+    'macarrao': 'Macarrão, trigo, cozido',
 }
 
 
@@ -127,10 +157,13 @@ def buscar(texto, limite=6):
     if fixo:
         achados.sort(key=lambda t: t[3] != fixo)  # sort estável: só leva o fixo pro início
 
+    _carregar_medidas()
     return [{
+        'medidas': _medidas.get(a['nome'], {}).get('medidas', []),
+        'medidas_fonte': _medidas.get(a['nome'], {}).get('fonte', ''),
         'nome': a['nome'],
         'marca': a['categoria'],
-        'fonte': '🇧🇷 TACO (Unicamp)',
+        'fonte': a['fonte'],
         'porcao': '100g',
         'unidade': '',
         'base': '100g',

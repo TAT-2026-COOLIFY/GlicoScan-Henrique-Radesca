@@ -35,6 +35,17 @@ export function gramasParaPorcoes(gramas) {
   return Math.min(50, Math.round(g) / 100)
 }
 
+/**
+ * "2 colheres de servir" → gramas. quantidade aceita vírgula e meios (1,5). Devolve 0 se
+ * qualquer dos dois não for número positivo.
+ */
+export function gramasDeMedida(quantidade, gramasPorMedida) {
+  const q = parseFloat(String(quantidade).replace(',', '.'))
+  const g = Number(gramasPorMedida)
+  if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(g) || g <= 0) return 0
+  return Math.round(q * g)
+}
+
 /** Inverso de gramasParaPorcoes, pra mostrar o campo "Quantidade (g)". */
 export function porcoesParaGramas(porcoes) {
   return Math.round((Number(porcoes) || 0) * 100)

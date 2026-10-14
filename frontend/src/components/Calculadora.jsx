@@ -14,11 +14,11 @@
 //   dose_final = base + correção − insulina ativa, nunca negativa, arredondada
 //                PARA BAIXO em passos de 0,5 UI (ver utils/dose.js)
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { C } from '../theme'
 import { INSULIN_TIPS, DURACAO_INSULINA_HORAS } from '../constants'
 import { storage } from '../utils/storage'
-import { valorSuspeito, gerarDescricao, gramasParaPorcoes, porcoesParaGramas } from '../utils/nutrition'
+import { valorSuspeito, gerarDescricao, gramasParaPorcoes, porcoesParaGramas, gramasDeMedida } from '../utils/nutrition'
 import { calcularIOB } from '../utils/iob'
 import { calcularDose, glicemiaParaMgdl, umDecimal, LIMITE_HIPO_MGDL } from '../utils/dose'
 import { Card } from './Layout'
@@ -313,7 +313,7 @@ function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, 
               <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:4 }}>Porções</div>
               <div style={{ fontSize:12, color:C.accent, marginTop:4 }}>🍽️ {gerarDescricao(portions, editNut.porcao, editNut.unidade)}</div>
               <div style={{ fontSize:11, color:C.text3, marginTop:2 }}>{+((editNut.carboidratos || 0) * portions).toFixed(1)}g de carboidrato</div>
-              {editNut.base === '100g' && <QuantidadeGramas portions={portions} setPortions={setPortions} />}
+              {editNut.base === '100g' && <QuantidadeGramas portions={portions} setPortions={setPortions} medidas={editNut.medidas || []} fonteMedidas={editNut.medidasFonte} />}
             </div>
             <div style={{ display:'flex', alignItems:'center', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:14, overflow:'hidden' }}>
               <button onClick={() => setPortions(p => +(Math.max(0.5, p - .5).toFixed(1)))} style={{ width:40, height:42, background:'none', border:'none', color:C.accent, fontSize:20, cursor:'pointer' }}>−</button>
@@ -357,27 +357,62 @@ function TelaResultado({ editNut, portions, setPortions, glicemia, setGlicemia, 
 }
 
 // Alimento por 100g (tabela TACO): "1 porção" = 100g não faz sentido pra uma colher de arroz,
-// então a quantidade é digitada em gramas (e vira N/100 porções).
-function QuantidadeGramas({ portions, setPortions }) {
+// então a quantidade é digitada em gramas — ou em medidas caseiras (colher, concha, unidade),
+// quando há medida revisada pro alimento. Tudo vira N/100 porções.
+function QuantidadeGramas({ portions, setPortions, medidas = [], fonteMedidas = '' }) {
+  const [modo, setModo]   = useState('g')                       // 'g' ou índice da medida
   const [texto, setTexto] = useState(String(porcoesParaGramas(portions)))
+  const ultimaDaqui = useRef(portions)                           // distingue o que EU mandei do que veio dos botões −/+
 
-  // Os botões −/+ também mexem nas porções: mantém o campo de gramas em sincronia.
+  const medida = modo === 'g' ? null : medidas[Number(modo)]
+  const gramas = medida ? gramasDeMedida(texto, medida.g) : Math.round(parseFloat(String(texto).replace(',', '.')) || 0)
+
+  const aplicar = (g) => {
+    const p = gramasParaPorcoes(g)
+    if (p > 0) { ultimaDaqui.current = p; setPortions(p) }
+  }
+
+  // Botões −/+ (porções) mexeram: volta pro modo gramas, já mostrando o valor atual.
   useEffect(() => {
-    if (gramasParaPorcoes(texto) !== portions) setTexto(String(porcoesParaGramas(portions)))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (portions !== ultimaDaqui.current) {
+      ultimaDaqui.current = portions
+      setModo('g'); setTexto(String(porcoesParaGramas(portions)))
+    }
   }, [portions])
 
+  const trocarModo = (novo) => {
+    setModo(novo)
+    if (novo === 'g') { setTexto(String(porcoesParaGramas(portions))); return }
+    setTexto('1')
+    aplicar(gramasDeMedida(1, medidas[Number(novo)].g))
+  }
+
+  const estiloInput = { width:72, padding:'6px 8px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, fontSize:14, fontWeight:700, textAlign:'center', outline:'none', fontFamily:'inherit' }
+
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
-      <span style={{ fontSize:12, color:C.text2 }}>Quantidade:</span>
-      <input type="number" inputMode="decimal" min="1" value={texto}
-        onChange={e => {
-          setTexto(e.target.value)
-          const p = gramasParaPorcoes(e.target.value)
-          if (p > 0) setPortions(p)
-        }}
-        style={{ width:72, padding:'6px 8px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, color:C.text, fontSize:14, fontWeight:700, textAlign:'center', outline:'none', fontFamily:'inherit' }} />
-      <span style={{ fontSize:12, color:C.text2 }}>g</span>
+    <div style={{ marginTop:8 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+        <span style={{ fontSize:12, color:C.text2 }}>Quantidade:</span>
+        <input type="number" inputMode="decimal" min="0" step={medida ? '0.5' : '1'} value={texto}
+          onChange={e => {
+            setTexto(e.target.value)
+            aplicar(medida ? gramasDeMedida(e.target.value, medida.g) : e.target.value)
+          }}
+          style={estiloInput} />
+        {medidas.length > 0 ? (
+          <select value={modo} onChange={e => trocarModo(e.target.value)}
+            style={{ ...estiloInput, width:'auto', fontWeight:600, fontSize:13 }}>
+            <option value="g">g (gramas)</option>
+            {medidas.map((m, i) => <option key={m.nome} value={i}>{m.nome} (~{m.g}g)</option>)}
+          </select>
+        ) : <span style={{ fontSize:12, color:C.text2 }}>g</span>}
+      </div>
+      {medida && (
+        <div style={{ fontSize:11, color:C.text3, marginTop:6, lineHeight:1.5 }}>
+          ≈ <strong style={{ color:C.text2 }}>{gramas} g</strong>. Medida caseira é média ({fonteMedidas || 'IBGE/POF'}):
+          colher cheia ou rasa muda o peso. Na dúvida, pese.
+        </div>
+      )}
     </div>
   )
 }
