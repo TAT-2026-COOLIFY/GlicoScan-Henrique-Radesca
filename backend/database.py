@@ -15,6 +15,7 @@ import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import busca
 import config
 from config import DB_PATH, DATABASE_URL
 
@@ -80,12 +81,27 @@ def init_db():
             criado_em TEXT
         )
     ''')
+    conn.execute(f'''
+        CREATE TABLE IF NOT EXISTS produtos_usuario (
+            id {pk},
+            user_id TEXT NOT NULL,
+            codigo TEXT,
+            nome TEXT NOT NULL,
+            nome_norm TEXT NOT NULL,
+            porcao TEXT, unidade TEXT, embalagem TEXT,
+            carboidratos DOUBLE PRECISION, acucares DOUBLE PRECISION, fibras DOUBLE PRECISION,
+            proteinas DOUBLE PRECISION, gorduras DOUBLE PRECISION, calorias DOUBLE PRECISION,
+            criado_em TEXT, atualizado_em TEXT
+        )
+    ''')
+    conn.execute('CREATE INDEX IF NOT EXISTS ix_produtos_usuario_dono ON produtos_usuario (user_id, codigo)')
     if conn.postgres:
         # O Supabase expõe o schema public via API REST com a chave pública
         # (que está no frontend). RLS ligado e sem nenhuma policy = a API
         # REST não enxerga nada; o backend conecta como dono e ignora o RLS.
         conn.execute('ALTER TABLE historico ENABLE ROW LEVEL SECURITY')
         conn.execute('ALTER TABLE cache_busca ENABLE ROW LEVEL SECURITY')
+        conn.execute('ALTER TABLE produtos_usuario ENABLE ROW LEVEL SECURITY')
     else:
         # Migração pra bancos SQLite criados antes de existirem estas colunas.
         # (user_id: linhas antigas ficam NULL e não aparecem pra ninguém.)
@@ -262,3 +278,118 @@ def obter_estatisticas(user_id):
         'por_dia': por_dia_processado,
         'mais_consumidos': [dict(r) for r in mais_consumidos],
     }
+
+
+# ── Produtos do usuário ("Meus produtos") ───────────────────────────
+# Valores que o próprio usuário confirmou/corrigiu (foto da tabela, digitação
+# ou ajuste de um dado errado da base). Ficam POR CONTA: nunca viram sugestão
+# pra outra pessoa, porque dado nutricional errado afeta a dose de insulina.
+
+LIMITE_PRODUTOS_USUARIO = 500
+_CAMPOS_PRODUTO_NUM = ('carboidratos', 'acucares', 'fibras', 'proteinas', 'gorduras', 'calorias')
+
+
+def _linha_produto(r):
+    d = dict(r)
+    return {
+        'id': d['id'], 'codigo': d.get('codigo') or '', 'produto': d['nome'], 'nome': d['nome'],
+        'porcao': d.get('porcao') or '—', 'unidade': d.get('unidade') or '',
+        'embalagem': d.get('embalagem') or '',
+        **{c: d.get(c) or 0 for c in _CAMPOS_PRODUTO_NUM},
+    }
+
+
+def salvar_produto_usuario(d, user_id):
+    """Insere ou atualiza (mesmo código, ou mesmo nome quando não há código). Retorna o id,
+    ou None se a conta já atingiu o limite de produtos salvos."""
+    nome = str(d.get('nome') or d.get('produto') or '').strip()[:80]
+    codigo = ''.join(ch for ch in str(d.get('codigo') or '') if ch.isdigit())[:14]
+    nome_norm = busca.normalizar(nome)
+    agora = datetime.now(ZoneInfo(config.APP_TZ)).isoformat(timespec='seconds')
+    valores = [float(d.get(c) or 0) for c in _CAMPOS_PRODUTO_NUM]
+
+    conn = get_connection()
+    if codigo:
+        existente = conn.execute(
+            'SELECT id FROM produtos_usuario WHERE user_id=? AND codigo=?', (user_id, codigo)
+        ).fetchone()
+    else:
+        existente = conn.execute(
+            "SELECT id FROM produtos_usuario WHERE user_id=? AND (codigo IS NULL OR codigo='') AND nome_norm=?",
+            (user_id, nome_norm)
+        ).fetchone()
+
+    if existente:
+        conn.execute(
+            '''UPDATE produtos_usuario SET nome=?, nome_norm=?, porcao=?, unidade=?, embalagem=?,
+               carboidratos=?, acucares=?, fibras=?, proteinas=?, gorduras=?, calorias=?, atualizado_em=?
+               WHERE id=? AND user_id=?''',
+            (nome, nome_norm, d.get('porcao') or '', d.get('unidade') or '', d.get('embalagem') or '',
+             *valores, agora, existente['id'], user_id)
+        )
+        novo_id = existente['id']
+    else:
+        total = conn.execute(
+            'SELECT COUNT(*) AS n FROM produtos_usuario WHERE user_id=?', (user_id,)
+        ).fetchone()['n']
+        if total >= LIMITE_PRODUTOS_USUARIO:
+            conn.close()
+            return None
+        novo_id = conn.execute(
+            '''INSERT INTO produtos_usuario
+               (user_id, codigo, nome, nome_norm, porcao, unidade, embalagem,
+                carboidratos, acucares, fibras, proteinas, gorduras, calorias, criado_em, atualizado_em)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id''',
+            (user_id, codigo, nome, nome_norm, d.get('porcao') or '', d.get('unidade') or '',
+             d.get('embalagem') or '', *valores, agora, agora)
+        ).fetchone()['id']
+    conn.commit()
+    conn.close()
+    return novo_id
+
+
+def produto_usuario_por_codigo(user_id, codigos):
+    """Produto salvo pela conta pra qualquer uma das formas do código, ou None."""
+    if not codigos:
+        return None
+    conn = get_connection()
+    marcas = ','.join('?' for _ in codigos)
+    row = conn.execute(
+        f'SELECT * FROM produtos_usuario WHERE user_id=? AND codigo IN ({marcas}) '
+        'ORDER BY atualizado_em DESC LIMIT 1',
+        (user_id, *codigos)
+    ).fetchone()
+    conn.close()
+    return _linha_produto(row) if row else None
+
+
+def buscar_produtos_usuario(user_id, texto, limite=5):
+    """Produtos da conta cujo nome contém todas as palavras da busca."""
+    palavras = busca.tokens(texto)
+    if not palavras:
+        return []
+    filtros = ' AND '.join('nome_norm LIKE ?' for _ in palavras)
+    conn = get_connection()
+    rows = conn.execute(
+        f'SELECT * FROM produtos_usuario WHERE user_id=? AND {filtros} '
+        'ORDER BY atualizado_em DESC LIMIT ?',
+        (user_id, *[f'%{p}%' for p in palavras], limite)
+    ).fetchall()
+    conn.close()
+    return [_linha_produto(r) for r in rows]
+
+
+def listar_produtos_usuario(user_id, limite=200):
+    conn = get_connection()
+    rows = conn.execute(
+        'SELECT * FROM produtos_usuario WHERE user_id=? ORDER BY nome_norm LIMIT ?', (user_id, limite)
+    ).fetchall()
+    conn.close()
+    return [_linha_produto(r) for r in rows]
+
+
+def remover_produto_usuario(id, user_id):
+    conn = get_connection()
+    conn.execute('DELETE FROM produtos_usuario WHERE id=? AND user_id=?', (id, user_id))
+    conn.commit()
+    conn.close()

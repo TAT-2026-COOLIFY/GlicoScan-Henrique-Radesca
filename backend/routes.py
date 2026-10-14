@@ -12,12 +12,13 @@ import re
 import requests
 from flask import Blueprint, request, jsonify, g
 
+import busca
 import database as db
 import parsing
 import config
 from config import OCR_API_KEY, CALORIE_API_KEY, SUPABASE_URL, DOCTOR_PASSWORD
 from extensions import limiter
-from services import ocr, openfoodfacts, usda, fatsecret, supabase_auth
+from services import ocr, openfoodfacts, usda, fatsecret, supabase_auth, taco
 
 bp = Blueprint('rotas', __name__)
 
@@ -72,58 +73,101 @@ def analisar():
 
 # ── Busca por nome (usada na tela de fallback manual) ──────────────
 
-def _buscar_com_cache(nome):
-    """Busca em paralelo na FatSecret + Open Food Facts, com cache de 24h por termo de busca."""
-    chave_cache = nome.lower().strip()
+def _buscar_externo(nome):
+    """FatSecret + Open Food Facts em paralelo, com cache de 24h por termo (normalizado)."""
+    chave_cache = busca.normalizar(nome)
     cache = db.buscar_no_cache(chave_cache, validade_horas=24)
-    if cache is not None:
+    if isinstance(cache, dict) and 'fs' in cache:   # (formato antigo era uma lista: ignora)
         print(f"🗃️ Cache hit: '{chave_cache}'")
-        return cache
+        return cache['fs'], cache['off']
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         f_fs = executor.submit(fatsecret.buscar_por_nome, nome)
         f_off = executor.submit(openfoodfacts.buscar_por_nome, nome)
         resultado_fs, resultado_off = f_fs.result(), f_off.result()
 
-    todos = resultado_fs + resultado_off
-
-    # Deduplica por nome (evita mostrar o mesmo produto vindo das duas fontes)
-    vistos, unicos = set(), []
-    for p in todos:
-        chave = p['nome'].lower()[:20]
-        if chave not in vistos:
-            vistos.add(chave)
-            unicos.append(p)
-
     print(f"🔍 '{nome}' → FatSecret:{len(resultado_fs)} OFF:{len(resultado_off)}")
+    # Só cacheia se algo respondeu: uma falha de rede não pode virar "sem resultado" por 24h
+    if resultado_fs or resultado_off:
+        db.salvar_no_cache(chave_cache, {'fs': resultado_fs, 'off': resultado_off})
+    return resultado_fs, resultado_off
 
-    if unicos:
-        db.salvar_no_cache(chave_cache, unicos)
 
-    return unicos
+def _buscar_alimentos(nome, user_id):
+    """
+    Ordem dos resultados: 1) produtos que a própria conta salvou, 2) tabela TACO
+    (alimentos genéricos), 3) Open Food Facts e FatSecret intercalados — o
+    brasileiro (OFF) abre cada rodada, já que a FatSecret é majoritariamente
+    americana e antes enchia sozinha as 8 vagas.
+    """
+    meus = db.buscar_produtos_usuario(user_id, nome)
+    for p in meus:
+        p.update({'fonte': '⭐ Meus produtos', 'marca': '', 'base': 'porcao', 'imagem': ''})
+    genericos = taco.buscar(nome)
+    fs, off = _buscar_externo(nome)
+    return meus + busca.mesclar(genericos, off, fs, limite=10 - len(meus))
 
 
 @bp.route('/buscar')
-@limiter.limit('15 per minute')
+@limiter.limit('30 per minute')
 def buscar():
     nome = request.args.get('nome', '').strip()
     if not nome:
         return jsonify({'erro': 'Nome não informado'}), 400
-    produtos = _buscar_com_cache(nome)
+    produtos = _buscar_alimentos(nome, g.user_id)
     if not produtos:
-        return jsonify({'erro': 'Nenhum produto encontrado. Tente outro nome ou escaneie a tabela.'}), 200
-    return jsonify({'produtos': produtos[:8]})
+        return jsonify({'erro': 'Nenhum produto encontrado. Tente outro nome ou fotografe a tabela.'}), 200
+    return jsonify({'produtos': produtos})
 
 
 @bp.route('/barcode/fallback')
-@limiter.limit('15 per minute')
+@limiter.limit('30 per minute')
 def barcode_fallback():
     """Quando a busca por código de barras falha, permite buscar pelo nome do produto."""
     nome = request.args.get('nome', '').strip()
     if not nome:
         return jsonify({'produtos': []})
-    produtos = _buscar_com_cache(nome)
-    return jsonify({'produtos': produtos[:5]})
+    return jsonify({'produtos': _buscar_alimentos(nome, g.user_id)})
+
+
+# ── Meus produtos (valores que a própria conta confirmou) ──────────
+
+CAMPOS_PRODUTO = ['carboidratos', 'acucares', 'fibras', 'proteinas', 'gorduras', 'calorias']
+
+
+@bp.route('/meus-produtos', methods=['GET'])
+def meus_produtos_listar():
+    return jsonify({'produtos': db.listar_produtos_usuario(g.user_id)})
+
+
+@bp.route('/meus-produtos', methods=['POST'])
+@limiter.limit('30 per minute')
+def meus_produtos_salvar():
+    d = request.get_json(silent=True)
+    if not isinstance(d, dict):
+        return jsonify({'erro': 'Corpo da requisição inválido'}), 400
+    if not str(d.get('nome') or d.get('produto') or '').strip():
+        return jsonify({'erro': 'Nome do produto é obrigatório'}), 400
+    for campo in CAMPOS_PRODUTO:
+        try:
+            v = float(d.get(campo) or 0)
+        except (TypeError, ValueError):
+            return jsonify({'erro': f'Campo "{campo}" precisa ser numérico'}), 400
+        if not 0 <= v <= 1000:
+            return jsonify({'erro': f'Campo "{campo}" fora do intervalo'}), 400
+    if not any(float(d.get(c) or 0) for c in CAMPOS_PRODUTO):
+        return jsonify({'erro': 'Informe ao menos um valor nutricional'}), 400
+
+    novo_id = db.salvar_produto_usuario(d, g.user_id)
+    if novo_id is None:
+        return jsonify({'erro': f'Limite de {db.LIMITE_PRODUTOS_USUARIO} produtos salvos atingido'}), 409
+    return jsonify({'ok': True, 'id': novo_id})
+
+
+@bp.route('/meus-produtos/<int:id>', methods=['DELETE'])
+def meus_produtos_remover(id):
+    db.remover_produto_usuario(id, g.user_id)
+    return jsonify({'ok': True})
 
 
 # ── Busca por código de barras (fluxo principal do app) ────────────
@@ -189,15 +233,25 @@ def barcode():
         if not code:
             return jsonify({'erro': 'Código não informado'}), 400
 
-        code = re.sub(r'[^0-9]', '', code)
-        if len(code) < 8:
+        # UPC-A (12 dígitos), EAN-8, zeros à esquerda: formas equivalentes do mesmo GTIN
+        candidatos = busca.variantes_codigo(code)
+        if not candidatos:
             return jsonify({'erro': 'Código inválido'}), 400
+        code = candidatos[0]
 
         print(f"🔍 Barcode: {code}")
+
+        # 0) Produto que a própria conta já confirmou/corrigiu vence qualquer base externa
+        meu = db.produto_usuario_por_codigo(g.user_id, candidatos)
+        if meu:
+            meu.update({'fonte': 'Meus produtos', 'aviso': 'Valores informados por você', 'texto_bruto': '', 'imagem': ''})
+            print(f"⭐ Meus produtos: {meu['produto']}")
+            return jsonify(meu)
+
         cache_fresco, cache_antigo = db.buscar_cache_barcode(code)
 
         # 1) Open Food Facts
-        resultado = openfoodfacts.buscar_por_codigo(code)
+        resultado, parcial = openfoodfacts.buscar_por_codigo_detalhado(candidatos)
         if resultado:
             db.salvar_no_cache(f'barcode:{code}', resultado)
             print(f"✅ OFF: {resultado['produto']} | Carbo:{resultado['carboidratos']}g")
@@ -228,7 +282,17 @@ def barcode():
             cache_antigo['aviso'] = '⚠️ Dados do cache — verifique os valores na embalagem'
             return jsonify(cache_antigo)
 
-        return jsonify({'erro': 'Produto não encontrado em nenhuma base de dados. Tente novamente em instantes.'}), 200
+        # 6) A OFF conhece o produto, mas sem tabela nutricional: não é "não encontrado".
+        #    Devolve o nome pra tela pedir a foto da tabela (ou a digitação dos valores).
+        if parcial:
+            print(f"🟡 OFF sem nutrientes: {parcial['produto']}")
+            return jsonify({
+                'incompleto': True, 'codigo': code, **parcial,
+                'erro': 'Produto encontrado, mas sem dados nutricionais cadastrados.',
+            }), 200
+
+        return jsonify({'erro': 'Produto não encontrado em nenhuma base de dados. Tente novamente em instantes.',
+                        'codigo': code}), 200
 
     except Exception as e:
         print(f"❌ Barcode: {e}")
