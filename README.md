@@ -258,3 +258,22 @@ dentro de cada conta, no navegador.
 7. **Gráfico de glicemia** — o mini-gráfico de evolução do Histórico
    ganhou uma terceira linha com a glicemia média por dia
    (`AVG(glicemia_atual)` no backend, ignorando dias sem registro).
+
+## Busca de alimentos (como o app acha os valores)
+
+Ordem na **busca por nome** (`backend/routes.py::_buscar_alimentos`):
+
+1. **⭐ Meus produtos** — valores que a própria conta confirmou/corrigiu (`/meus-produtos`).
+   Por conta, nunca compartilhado. No código de barras, vence qualquer base externa.
+2. **🇧🇷 TACO (Unicamp)** — ~580 alimentos genéricos (arroz, feijão, pão francês, frutas...),
+   valores por 100 g, em memória (`backend/data/taco.csv`, ver `backend/data/README.md`).
+   Preparado (cozido/assado) vem antes de cru; processado (condensado, doce em calda) por último.
+3. **Open Food Facts** e **FatSecret**, intercalados (o brasileiro abre cada rodada).
+
+Por **código de barras**: Meus produtos → Open Food Facts (todas as variantes do GTIN:
+UPC-A ↔ EAN-13) → CalorieAPI → USDA (match exato) → cache. Se o produto existe na OFF mas
+sem tabela nutricional, o app pede a **foto da tabela** (OCR) ou a digitação — nunca
+assume carboidrato 0.
+
+Regra de projeto: valor **ausente** nunca vira 0 (dose zero sem aviso), e código de barras
+nunca casa por "parecido".

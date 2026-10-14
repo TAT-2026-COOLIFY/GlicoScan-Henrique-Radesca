@@ -68,11 +68,33 @@ def _corrigir(palavra):
 
 _PREPARADO = {'cozido', 'cozida', 'assado', 'assada', 'grelhado', 'grelhada', 'frito', 'frita', 'refogado', 'refogada'}
 _CRU = {'cru', 'crua', 'seco', 'seca'}
+# Versões processadas/concentradas: o usuário que digita "leite" ou "banana" quer o alimento
+# comum, não leite condensado (57 g de carbo) nem banana-doce em barra (76 g). Ficam por último.
+_PROCESSADO = {'doce', 'condensado', 'calda', 'mistura', 'instantaneo', 'po', 'geleia', 'compota',
+               'enlatado', 'conserva', 'glace', 'cristalizado', 'extrato', 'concentrado', 'achocolatado'}
+
+
+# Busca de uma palavra só → o alimento que a pessoa quase sempre quer (fica no topo).
+# Chave = palavras normalizadas da busca; valor = nome exato na tabela (testado em test_taco_dados_reais).
+_PREFERIDOS = {
+    'arroz': 'Arroz, tipo 1, cozido',
+    'feijao': 'Feijão, carioca, cozido',
+    'pao': 'Pão, trigo, francês',
+    'banana': 'Banana, prata, crua',
+    'batata': 'Batata, inglesa, cozida',
+    'laranja': 'Laranja, pêra, crua',
+    'maca': 'Maçã, Fuji, com casca, crua',
+    'mamao': 'Mamão, Formosa, cru',
+    'ovo': 'Ovo, de galinha, inteiro, cozido/10minutos',
+    'cenoura': 'Cenoura, cozida',
+}
 
 
 def _estado(toks):
-    """0 = pronto pra comer, 1 = não informado, 2 = cru/seco. Arroz cru tem ~3x o carboidrato do
+    """0 = pronto pra comer, 1 = não informado, 2 = cru/seco, 3 = processado/concentrado. Arroz cru tem ~3x o carboidrato do
     cozido: sugerir o cru primeiro levaria a uma dose muito maior que a necessária."""
+    if any(t in _PROCESSADO for t in toks):
+        return 3
     if any(t in _PREPARADO for t in toks):
         return 0
     if any(t in _CRU for t in toks):
@@ -100,6 +122,10 @@ def buscar(texto, limite=6):
             comeca = a['_toks'][:1] == palavras[:1]
             achados.append((0 if exato else 1 if comeca else 2, _estado(a['_toks']), len(a['_toks']), a['nome'], a))
     achados.sort(key=lambda t: t[:4])
+
+    fixo = _PREFERIDOS.get(' '.join(palavras))
+    if fixo:
+        achados.sort(key=lambda t: t[3] != fixo)  # sort estável: só leva o fixo pro início
 
     return [{
         'nome': a['nome'],
