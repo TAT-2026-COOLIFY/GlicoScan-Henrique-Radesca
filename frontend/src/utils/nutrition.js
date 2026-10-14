@@ -26,6 +26,21 @@ export function valorSuspeito(chave, valor, porcaoTexto) {
 }
 
 /**
+ * Alimentos genéricos (tabela TACO) vêm por 100g. A tela trabalha em "porções",
+ * então N gramas = N/100 porção. Devolve 0 se o texto não for um número positivo.
+ */
+export function gramasParaPorcoes(gramas) {
+  const g = parseFloat(String(gramas).replace(',', '.'))
+  if (!Number.isFinite(g) || g <= 0) return 0
+  return Math.min(50, Math.round(g) / 100)
+}
+
+/** Inverso de gramasParaPorcoes, pra mostrar o campo "Quantidade (g)". */
+export function porcoesParaGramas(porcoes) {
+  return Math.round((Number(porcoes) || 0) * 100)
+}
+
+/**
  * Converte "quantas porções o usuário vai comer" numa descrição legível,
  * tipo "3 biscoitos" ou "450ml", em vez de só "3 porções".
  */
