@@ -105,6 +105,7 @@ export default function ScanTab({ showToast, acaoInicial }) {
   const selecionarSugestao = (p) => {
     setNutrition({
       produto: p.nome, porcao: p.porcao || '—', unidade: p.unidade || '', base: p.base,
+      medidas: p.medidas || [], medidasFonte: p.medidas_fonte || '',
       calorias: p.calorias, carboidratos: p.carboidratos, acucares: p.acucares,
       fibras: p.fibras, proteinas: p.proteinas, gorduras: p.gorduras, texto_bruto: '',
       fonte: p.fonte, codigo: lastCode || '', origem: 'busca',

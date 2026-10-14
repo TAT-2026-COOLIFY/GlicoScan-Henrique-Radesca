@@ -1,0 +1,202 @@
+{
+ "Arroz, tipo 1, cozido": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "colher de servir",
+    "g": 45.0
+   },
+   {
+    "nome": "colher de sopa",
+    "g": 25.0
+   },
+   {
+    "nome": "concha",
+    "g": 100.0
+   },
+   {
+    "nome": "prato raso",
+    "g": 100.0
+   },
+   {
+    "nome": "xícara de chá",
+    "g": 100.0
+   }
+  ]
+ },
+ "Arroz, tipo 2, cozido": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "colher de servir",
+    "g": 45.0
+   },
+   {
+    "nome": "colher de sopa",
+    "g": 25.0
+   },
+   {
+    "nome": "concha",
+    "g": 100.0
+   },
+   {
+    "nome": "prato raso",
+    "g": 100.0
+   },
+   {
+    "nome": "xícara de chá",
+    "g": 100.0
+   }
+  ]
+ },
+ "Arroz, integral, cozido": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "colher de sopa",
+    "g": 20.0
+   },
+   {
+    "nome": "prato raso",
+    "g": 100.0
+   }
+  ]
+ },
+ "Feijão, carioca, cozido": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "colher de servir",
+    "g": 35.0
+   },
+   {
+    "nome": "colher de sopa",
+    "g": 17.0
+   },
+   {
+    "nome": "concha",
+    "g": 140.0
+   },
+   {
+    "nome": "prato raso",
+    "g": 140.0
+   }
+  ]
+ },
+ "Feijão, preto, cozido": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "colher de servir",
+    "g": 35.0
+   },
+   {
+    "nome": "colher de sopa",
+    "g": 17.0
+   },
+   {
+    "nome": "concha",
+    "g": 140.0
+   },
+   {
+    "nome": "prato raso",
+    "g": 140.0
+   }
+  ]
+ },
+ "Pão, trigo, francês": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "unidade",
+    "g": 50.0
+   },
+   {
+    "nome": "fatia",
+    "g": 25.0
+   }
+  ]
+ },
+ "Pão, trigo, forma, integral": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "fatia",
+    "g": 25.0
+   }
+  ]
+ },
+ "Banana, prata, crua": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "unidade",
+    "g": 75.0
+   }
+  ]
+ },
+ "Batata, inglesa, cozida": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "unidade",
+    "g": 140.0
+   },
+   {
+    "nome": "unidade pequena",
+    "g": 70.0
+   },
+   {
+    "nome": "colher de servir",
+    "g": 60.0
+   },
+   {
+    "nome": "colher de sopa",
+    "g": 30.0
+   }
+  ]
+ },
+ "Macarrão, trigo, cozido": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "colher de servir",
+    "g": 50.0
+   },
+   {
+    "nome": "colher de sopa",
+    "g": 25.0
+   },
+   {
+    "nome": "pegador",
+    "g": 110.0
+   },
+   {
+    "nome": "garfada",
+    "g": 30.0
+   }
+  ]
+ },
+ "Ovo, de galinha, inteiro, cozido/10minutos": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "unidade",
+    "g": 45.0
+   }
+  ]
+ },
+ "Leite, de vaca, integral (fluido)": {
+  "fonte": "IBGE/POF 2008-2009 (média)",
+  "medidas": [
+   {
+    "nome": "copo americano",
+    "g": 150.0
+   },
+   {
+    "nome": "copo de requeijão",
+    "g": 240.0
+   }
+  ]
+ }
+}

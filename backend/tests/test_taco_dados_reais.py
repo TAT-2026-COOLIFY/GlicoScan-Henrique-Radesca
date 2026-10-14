@@ -72,3 +72,26 @@ def test_complementos_usda_estao_rotulados_e_com_valores_plausiveis():
 
 def test_itens_da_taco_continuam_com_rotulo_taco():
     assert 'TACO' in _achar('arroz', 'Arroz, tipo 1, cozido')['fonte']
+
+
+def test_medidas_caseiras_so_para_alimentos_que_existem_na_tabela():
+    import json
+    taco._carregar()
+    nomes = {a['nome'] for a in taco._alimentos}
+    with open(taco.CAMINHO_MEDIDAS, encoding='utf-8') as f:
+        medidas = json.load(f)
+    assert medidas, 'medidas.json vazio'
+    for nome, dados in medidas.items():
+        assert nome in nomes, f'medidas para {nome!r}, que não existe em taco.csv'
+        assert dados['fonte']
+        for m in dados['medidas']:
+            assert 1 <= m['g'] <= 600, (nome, m)   # nada de colher de 2 kg
+
+
+def test_busca_traz_medidas_do_arroz_e_nada_pra_quem_nao_tem():
+    arroz = _achar('arroz', 'Arroz, tipo 1, cozido')
+    por_nome = {m['nome']: m['g'] for m in arroz['medidas']}
+    assert por_nome['colher de servir'] == 45
+    assert por_nome['colher de sopa'] == 25
+    assert arroz['medidas_fonte'].startswith('IBGE/POF')
+    assert _achar('bolo', 'Bolo, pronto, chocolate')['medidas'] == []
