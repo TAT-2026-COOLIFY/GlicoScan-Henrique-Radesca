@@ -1,0 +1,32 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      OCR_API_KEY: ${OCR_API_KEY:-}
+      FS_CLIENT_ID: ${FS_CLIENT_ID:-}
+      FS_CLIENT_SECRET: ${FS_CLIENT_SECRET:-}
+      CALORIE_API_KEY: ${CALORIE_API_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_KEY: ${SUPABASE_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+      DOCTOR_PASSWORD: ${DOCTOR_PASSWORD:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      DB_PATH: /data/glicoscan.db
+    volumes:
+      - dados:/data
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: ${SUPABASE_URL:-}
+        VITE_SUPABASE_KEY: ${SUPABASE_KEY:-}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  dados:
