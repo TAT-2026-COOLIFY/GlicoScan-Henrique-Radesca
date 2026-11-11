@@ -1,0 +1,23 @@
+name: Deploy no Coolify
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Disparar deploy no Coolify
+    runs-on: ubuntu-latest
+    env:
+      COOLIFY_WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+    steps:
+      - name: Chamar a API de deploy do Coolify
+        run: |
+          if [ -z "$COOLIFY_WEBHOOK" ]; then
+            echo "COOLIFY_WEBHOOK não configurado, deploy ignorado."
+            exit 0
+          fi
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            "$COOLIFY_WEBHOOK"
